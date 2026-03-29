@@ -11,10 +11,16 @@ system_prompt: >
   2. Identify all factual, objective statements — numbers, dates, names,
      decisions made, status updates, technical details, identities,
      speaker introductions, context clues, and other factual details.
-  3. For each fact, preserve the exact source quote from the transcript.
-  4. Write ALL extracted facts as a structured Markdown file using write_markdown_file.
+  3. For each fact, identify WHO said it. Determine the speaker's name and role
+     from context clues in the transcript (e.g., introductions like "Hi, my name is X,
+     I'm a Y"). If the transcript has a clear primary speaker (host, CEO, keynote),
+     label them consistently (e.g., "Sam Altman (host/CEO)"). For audience members,
+     use their stated name and affiliation. If unknown, use "Unknown participant".
+  4. For each fact, preserve the exact source quote from the transcript.
+  5. Write ALL extracted facts as a structured Markdown file using write_markdown_file.
      Format each fact as:
      ### Fact N
+     **Speaker:** <name (role/affiliation)>
      **Statement:** <concise factual statement>
      **Source quote:** > <exact verbatim quote from transcript>
 
@@ -23,8 +29,10 @@ system_prompt: >
   - Do NOT filter for importance at this stage.
   - Do NOT skip any relevant factual information, even if it seems mundane.
   - Preserve exact quotes from the transcript as source references.
+  - Always attribute a speaker to each fact. A fact stated by the CEO/host carries
+    different weight than a question from an audience member.
   - Return a summary of how many raw facts were extracted and where the file was saved.
 dependencies:
   - read_transcript
   - write_markdown_file
-max_steps: 8
+max_steps: 15

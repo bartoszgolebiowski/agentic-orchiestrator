@@ -1,0 +1,737 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+action-points/add-sign-in-with-chatgpt-across-services.md
+action-points/continue-hiring-software-developers-slow-growth.md
+action-points/deliver-gpt-5-2-class-model-high-level-intelligence-2027.md
+action-points/focus-gpt-5-2-development-core-capabilities.md
+action-points/improve-writing-quality-gpt-5x.md
+action-points/no-personal-investment-large-openai-customers.md
+action-points/push-hard-on-memory-and-personalization-features.md
+action-points/reduce-model-cost-100x.md
+action-points/solve-3d-reasoning-challenge-drug-design.md
+conclusions.md
+facts_raw.md
+facts.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="action-points/add-sign-in-with-chatgpt-across-services.md">
+# Add Sign‑in with ChatGPT Across Services
+## Owner Sam Altman (CEO, OpenAI)
+## Commitment Type explicit-commitment
+- explicit-commitment
+## Description Implement a "sign‑in with ChatGPT" authentication option that allows users to authenticate via their OpenAI account on third‑party services.
+## Acceptance Criteria
+- Not specified in transcript. Criteria to be defined during implementation planning.
+## Definition of Done
+- Not specified in transcript. Definition of done to be established by the responsible team.
+## Confidence high
+## Metadata
+- **Priority:** high
+- **Category:** authentication & platform
+- **Risk:** Competitors may implement similar features first, reducing platform stickiness.
+- **Dependencies:** none
+## Source Quotes
+> "We are going to do that. People ask me for it all the time."
+</file>
+
+<file path="action-points/continue-hiring-software-developers-slow-growth.md">
+# Continue Hiring Software Developers but Slow Growth Rate
+## Owner Sam Altman (CEO, OpenAI)
+## Commitment Type explicit-commitment
+- explicit-commitment
+## Description OpenAI will continue hiring software engineers while dramatically slowing the rate of hiring to align with AI‑augmented productivity.
+## Acceptance Criteria
+- Not specified in transcript. Criteria to be defined during implementation planning.
+## Definition of Done
+- Not specified in transcript. Definition of done to be established by the responsible team.
+## Confidence high
+## Metadata
+- **Priority:** medium
+- **Category:** recruitment
+- **Risk:** Over‑hiring could lead to inefficiencies; under‑hiring could limit capacity.
+- **Dependencies:** none
+## Source Quotes
+> "we're going to keep hiring software developers... we are planning to dramatically slow down how quickly we grow."
+</file>
+
+<file path="action-points/deliver-gpt-5-2-class-model-high-level-intelligence-2027.md">
+# Deliver GPT‑5.2‑Class Model with High‑Level Intelligence by End of 2027
+## Owner Sam Altman (CEO, OpenAI)
+## Commitment Type explicit-commitment
+- explicit-commitment
+## Description Deliver a GPT‑5.2‑class model that exhibits high‑level intelligence, as defined by OpenAI, by the end of 2027.
+## Acceptance Criteria
+- Not specified in transcript. Criteria to be defined during implementation planning.
+## Definition of Done
+- Not specified in transcript. Definition of done to be established by the responsible team.
+## Confidence high
+## Metadata
+- **Priority:** high
+- **Category:** model roadmap
+- **Risk:** Delay could impact product roadmap and market expectations.
+- **Dependencies:** none
+## Source Quotes
+> "I think we should be able to deliver sort of GPT 5.2x to x high level intelligence by the end of 2027."
+</file>
+
+<file path="action-points/focus-gpt-5-2-development-core-capabilities.md">
+# Focus GPT‑5.2 Development on Core Capabilities
+## Owner Sam Altman (CEO, OpenAI)
+## Commitment Type explicit-commitment
+- explicit-commitment
+## Description Allocate the majority of effort for GPT‑5.2 to improve intelligence, reasoning, coding, and engineering capabilities.
+## Acceptance Criteria
+- Not specified in transcript. Criteria to be defined during implementation planning.
+## Definition of Done
+- Not specified in transcript. Definition of done to be established by the responsible team.
+## Confidence high
+## Metadata
+- **Priority:** high
+- **Category:** model development
+- **Risk:** If focus is diverted, model may not achieve intended performance gains.
+- **Dependencies:** none
+## Source Quotes
+> "we put most of our effort in 5.2 into making it super good at intelligence, reasoning, coding, engineering."
+</file>
+
+<file path="action-points/improve-writing-quality-gpt-5x.md">
+# Improve Writing Quality in GPT‑5.x
+## Owner Sam Altman (CEO, OpenAI)
+## Commitment Type explicit-commitment
+- explicit-commitment
+## Description Future versions of GPT‑5.x will have markedly better writing quality compared to GPT‑4.5.
+## Acceptance Criteria
+- Not specified in transcript. Criteria to be defined during implementation planning.
+## Definition of Done
+- Not specified in transcript. Definition of done to be established by the responsible team.
+## Confidence high
+## Metadata
+- **Priority:** medium
+- **Category:** model quality
+- **Risk:** Not specified in transcript. Risk to be assessed.
+- **Dependencies:** none
+## Source Quotes
+> "we will make future versions of GPT 5.x hopefully much better at writing than 4.5 was."
+</file>
+
+<file path="action-points/no-personal-investment-large-openai-customers.md">
+# No Personal Investment in Large OpenAI Customer Companies
+## Owner Sam Altman (CEO, OpenAI)
+## Commitment Type explicit-commitment
+- explicit-commitment
+## Description Sam Altman will not personally invest in companies that are large OpenAI customers.
+## Acceptance Criteria
+- Not specified in transcript. Criteria to be defined during implementation planning.
+## Definition of Done
+- Not specified in transcript. Definition of done to be established by the responsible team.
+## Confidence high
+## Metadata
+- **Priority:** medium
+- **Category:** investment policy
+- **Risk:** Potential missed investment opportunities; may affect relationships with large customers.
+- **Dependencies:** none
+## Source Quotes
+> "I don't personally... invest in companies that are big OpenAI customers."
+</file>
+
+<file path="action-points/push-hard-on-memory-and-personalization-features.md">
+# Push Hard on Memory and Personalization Features
+## Owner Sam Altman (CEO, OpenAI)
+## Commitment Type explicit-commitment
+- explicit-commitment
+## Description OpenAI will heavily invest in memory and personalization, eventually allowing the model to understand a user's entire digital life.
+## Acceptance Criteria
+- Not specified in transcript. Criteria to be defined during implementation planning.
+## Definition of Done
+- Not specified in transcript. Definition of done to be established by the responsible team.
+## Confidence high
+## Metadata
+- **Priority:** high
+- **Category:** memory & personalization
+- **Risk:** If not delivered, user experience may lag behind competitor offerings.
+- **Dependencies:** none
+## Source Quotes
+> "we're going to push super hard on memory and personalization... I am ready for chat to just look at my whole computer and my whole internet and just know everything."
+</file>
+
+<file path="action-points/reduce-model-cost-100x.md">
+# Reduce Model Cost by At Least 100×
+## Owner Sam Altman (CEO, OpenAI)
+## Commitment Type explicit-commitment
+- explicit-commitment
+## Description Future OpenAI models will be priced at least 100 times lower than current models.
+## Acceptance Criteria
+- Not specified in transcript. Criteria to be defined during implementation planning.
+## Definition of Done
+- Not specified in transcript. Definition of done to be established by the responsible team.
+## Confidence high
+## Metadata
+- **Priority:** high
+- **Category:** pricing & cost
+- **Risk:** If cost reduction is not achieved, adoption may be limited.
+- **Dependencies:** none
+## Source Quotes
+> "anyone want to give a guess I would say at least 100x less."
+</file>
+
+<file path="action-points/solve-3d-reasoning-challenge-drug-design.md">
+# Solve 3D‑Reasoning Challenge for Drug‑Design Workflows
+## Owner Sam Altman (CEO, OpenAI)
+## Commitment Type explicit-commitment
+- explicit-commitment
+## Description OpenAI will solve the 3‑D‑reasoning challenge for drug‑design workflows, delivering the capability in future models.
+## Acceptance Criteria
+- Not specified in transcript. Criteria to be defined during implementation planning.
+## Definition of Done
+- Not specified in transcript. Definition of done to be established by the responsible team.
+## Confidence high
+## Metadata
+- **Priority:** high
+- **Category:** scientific applications
+- **Risk:** If not delivered, OpenAI may lose competitive advantage in pharma AI.
+- **Dependencies:** none
+## Source Quotes
+> "We will get that solved... it's a super common request and I think we know how to do it."
+</file>
+
+<file path="conclusions.md">
+## Strengths
+### Conclusion 1
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** AI is dramatically expanding the capacity for software creation, leading to broader participation and sustained demand for software.
+**Type:** strength
+**Commitment Level:** n/a
+**Source quote:** > "I think what it means to be an engineer is going to super change... demand for software seems to not be slowing down at all."
+
+### Conclusion 2
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Building tools that help users be productive with extremely capable models is seen as a high-value opportunity.
+**Type:** strength
+**Commitment Level:** n/a
+**Source quote:** > "I think building tools to help people get be productive with extremely capable models is a very good idea."
+
+### Conclusion 3
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** The deflationary effect of AI is expected to empower individuals and increase overall economic productivity.
+**Type:** strength
+**Commitment Level:** n/a
+**Source quote:** > "AI is going to be massively deflationary... the empowerment of individual people ... looks like it's going to go up and up."
+
+## Weaknesses
+### Conclusion 4
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Even though building products is easier, finding users (GTM) remains a bottleneck due to limited human attention.
+**Type:** weakness
+**Commitment Level:** n/a
+**Source quote:** > "human attention remains like this very limited thing... you’re always going to be competing with other people trying to build their own go to market muscle."
+
+### Conclusion 5
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** The cost of running large numbers of agents is a major limiting factor for scaling AI-driven services.
+**Type:** weakness
+**Commitment Level:** n/a
+**Source quote:** > "The limiting factor for us to run millions, tens of millions, hundreds of millions of agents for our customers is cost."
+
+### Conclusion 6
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Current interview processes for software engineers have not kept pace with AI‑augmented productivity, reducing their relevance.
+**Type:** weakness
+**Commitment Level:** n/a
+**Source quote:** > "software engineering interviews have been bad for a long time... now they're even less relevant."
+
+## Risks
+### Conclusion 7
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Uncontrolled AI capabilities could concentrate wealth and power, presenting societal and policy risks.
+**Type:** risk
+**Commitment Level:** n/a
+**Source quote:** > "I am worried that you can imagine worlds in which AI really concentrates power and wealth and that feels like needs to be one of the main goals of policy for that not to happen."
+
+### Conclusion 8
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Rapid model improvements may outstrip security and alignment controls, leading to catastrophic failures in unsupervised agents.
+**Type:** risk
+**Commitment Level:** n/a
+**Source quote:** > "the power and convenience of these are so high and the failure rates are maybe catastrophic... we will sleepwalk into something."
+
+### Conclusion 9
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** AI‑generated content (e.g., images) is perceived as less valuable when known to be AI‑created, risking creator satisfaction.
+**Type:** risk
+**Commitment Level:** n/a
+**Source quote:** > "consumers of images report dramatically higher appreciation if they are told a person made it versus an AI."
+
+## Opportunities
+### Conclusion 10
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Developing diverse UI paradigms for multi‑agent orchestration can capture varied user preferences.
+**Type:** opportunity
+**Commitment Level:** n/a
+**Source quote:** > "We don't know what the right interface for all of this is going to be... there will be people who want a calm conversation in voice mode... and people who want 30 computer screens."
+
+### Conclusion 11
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Building AI‑assisted brainstorming tools (e.g., a "Paul Graham bot") could dramatically improve idea generation and GTM success.
+**Type:** opportunity
+**Commitment Level:** n/a
+**Source quote:** > "If we can build a Paul Graham bot that you can have the same kind of interaction with to help generate new ideas..."
+
+### Conclusion 12
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Memory and personalization features that understand a user's full digital life can unlock powerful, context‑aware assistants.
+**Type:** opportunity
+**Commitment Level:** n/a
+**Source quote:** > "we're going to push super hard on memory and personalization... I am ready for chat to just look at my whole computer and my whole internet and just know everything."
+
+### Conclusion 13
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Solving 3‑D reasoning for drug‑design workflows opens a high‑impact application area for generative models.
+**Type:** opportunity
+**Commitment Level:** n/a
+**Source quote:** > "We will get that solved... it's a super common request and I think we know how to do it."
+
+### Conclusion 14
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** AI can be leveraged for bio‑security resilience, turning a threat into a defensive capability.
+**Type:** opportunity
+**Commitment Level:** n/a
+**Source quote:** > "AI is going to be a real problem for bioterrorism... but AI is also a solution to those things."
+
+### Conclusion 15
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Emphasizing soft skills such as agency, idea generation, resilience, and adaptability prepares people for the AI‑augmented economy.
+**Type:** opportunity
+**Commitment Level:** n/a
+**Source quote:** > "These are soft skills... become high agency, get good at generating ideas, be very resilient, be very adaptable to a rapidly changing world."
+
+## Commitments
+### Conclusion 16
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Future GPT‑5.x models will have markedly better writing quality than GPT‑4.5.
+**Type:** commitment
+**Commitment Level:** explicit
+**Source quote:** > "we will make future versions of GPT 5.x hopefully much better at writing than 4.5 was."
+
+### Conclusion 17
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** The majority of effort for GPT‑5.2 will focus on intelligence, reasoning, coding, and engineering.
+**Type:** commitment
+**Commitment Level:** explicit
+**Source quote:** > "we put most of our effort in 5.2 into making it super good at intelligence, reasoning, coding, engineering."
+
+### Conclusion 18
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI aims to deliver a GPT‑5.2‑class model with high‑level intelligence by the end of 2027.
+**Type:** commitment
+**Commitment Level:** explicit
+**Source quote:** > "I think we should be able to deliver sort of GPT 5.2x to x high level intelligence by the end of 2027."
+
+### Conclusion 19
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Future models will cost at least 100× less than current ones.
+**Type:** commitment
+**Commitment Level:** explicit
+**Source quote:** > "anyone want to give a guess I would say at least 100x less."
+
+### Conclusion 20
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI will add a "sign‑in with ChatGPT" option across its services.
+**Type:** commitment
+**Commitment Level:** explicit
+**Source quote:** > "We are going to do that. People ask me for it all the time."
+
+### Conclusion 21
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI will heavily invest in memory and personalization, eventually allowing the model to understand a user's entire digital footprint.
+**Type:** commitment
+**Commitment Level:** explicit
+**Source quote:** > "we're going to push super hard on memory and personalization... I am ready for chat to just look at my whole computer and my whole internet and just know everything."
+
+### Conclusion 22
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI will solve the 3‑D reasoning challenge for drug‑design workflows, though it is not the top priority.
+**Type:** commitment
+**Commitment Level:** explicit
+**Source quote:** > "We will get that solved... it's a super common request and I think we know how to do it."
+
+### Conclusion 23
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI will not personally invest in companies that are large OpenAI customers.
+**Type:** commitment
+**Commitment Level:** explicit
+**Source quote:** > "I don't personally... invest in companies that are big OpenAI customers."
+
+### Conclusion 24
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI will continue hiring software engineers but will dramatically slow the rate of hiring to align with AI‑augmented productivity.
+**Type:** commitment
+**Commitment Level:** explicit
+**Source quote:** > "we're going to keep hiring software developers... we are planning to dramatically slow down how quickly we grow."
+
+## Recommendations
+### Conclusion 25
+**Speaker:** Analyst
+**Statement:** OpenAI should publish clear security‑by‑design guidelines for agents with autonomous access to prevent catastrophic failures.
+**Type:** recommendation
+**Commitment Level:** n/a
+**Source quote:** > "the power and convenience of these are so high and the failure rates are maybe catastrophic... we will sleepwalk into something."
+
+### Conclusion 26
+**Speaker:** Analyst
+**Statement:** Introduce a hybrid interview framework that evaluates candidates on AI‑augmented collaboration skills rather than traditional coding alone.
+**Type:** recommendation
+**Commitment Level:** n/a
+**Source quote:** > "software engineering interviews have been bad for a long time... now they're even less relevant."
+
+### Conclusion 27
+**Speaker:** Analyst
+**Statement:** Develop transparent attribution tools for AI‑generated creative content to preserve creator appreciation and mitigate the "AI‑devaluation" effect.
+**Type:** recommendation
+**Commitment Level:** n/a
+**Source quote:** > "consumers of images report dramatically higher appreciation if they are told a person made it versus an AI."
+
+### Conclusion 28
+**Speaker:** Analyst
+**Statement:** Establish a cross‑industry task force for AI‑biosecurity resilience, focusing on standards, rapid response, and responsible model release.
+**Type:** recommendation
+**Commitment Level:** n/a
+**Source quote:** > "we need to move from one of like blocking to one of resilience... AI is going to be a real problem for bioterrorism... but AI is also a solution to those things."
+
+## Vision
+### Conclusion 29
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** In the long term, AI will enable a world where software is continuously customized for each individual, reshaping the concept of computing.
+**Type:** vision
+**Commitment Level:** n/a
+**Source quote:** > "I think many more people will get computers to do the things they want to do and it will be a very different way than we do it today."
+
+### Conclusion 30
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** The future economy will feature AI‑augmented humans who generate ideas at scale, with AI acting as a continuous brainstorming partner.
+**Type:** vision
+**Commitment Level:** n/a
+**Source quote:** > "the models feel like they ought to be capable of that... we could build a Paul Graham bot that you can have the same kind of interaction with to help generate new ideas."
+
+---
+*Total conclusions generated: 30. Saved to `output/2026-03-29_15-34-19/conclusions.md`.*
+</file>
+
+<file path="facts_raw.md">
+### Fact 1
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI intends to gather audience input to understand what to build for developers and how to make powerful models useful.
+**Source quote:** > "...we wanted to just hear from you all about what you'd like ... answer any questions but I hope we come out of today with a much clearer sense of what to build for you all and how to make these incredibly powerful models useful."
+
+### Fact 2
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Demand for software is not slowing down.
+**Source quote:** > "demand for software seems to not be slowing down at all."
+
+### Fact 3
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He predicts that a greater percentage of global GDP will be created and consumed via software that individuals customize for themselves.
+**Source quote:** > "I think a greater percentage of the world's GDP will be created that way and consumed that way too."
+
+### Fact 4
+**Speaker:** George (solo developer, building on Codeex SDK)
+**Statement:** He is building a way to orchestrate multiple agents and asks whether the Agent Builder tool is safe for building different UI types.
+**Source quote:** > "I'm building a way to orchestrate multiple agents and I have a question about your agent builder tool ... am I safe? Like do you see room for a lot of different types of UIs for multi‑agent orchestration?"
+
+### Fact 5
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI does not yet know the optimal interface for multi‑agent workflows and expects a diversity of approaches.
+**Source quote:** > "We don't know what the right interface for all of this is going to be. We don't know how people are going to want to use it."
+
+### Fact 6
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI believes there is a large unmet need for tools that help users be productive with extremely capable models.
+**Source quote:** > "I think building tools to help people get be productive with extremely capable models is a very good idea."
+
+### Fact 7
+**Speaker:** Valerie Chapman (builder, concerned about wage gap)
+**Statement:** She notes that women leave about a million dollars on the table due to the wage gap.
+**Source quote:** > "currently women actually leave about a million dollars on the table due to the wage gap."
+
+### Fact 8
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** AI is expected to be massively deflationary, reducing costs of many activities.
+**Source quote:** > "AI is going to be massively deflationary."
+
+### Fact 9
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** By the end of the year, $100–$1,000 of inference will be sufficient to create software that previously required a team of people and a year of work.
+**Source quote:** > "by the end of this year for a hundred or $1,000 of inference, you will be able to ... create a piece of software that would have taken teams of people, you know, a year to do."
+
+### Fact 10
+**Speaker:** Ben Hilac (CTO, Raindrop)
+**Statement:** GPT‑4.5 was the first model he thought was really good at writing.
+**Source quote:** > "GPT 4.5 was the first model that I thought was like really good at writing."
+
+### Fact 11
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Future versions of GPT‑5.x will improve writing quality compared to 4.5.
+**Source quote:** > "we will make future versions of GPT 5.x hopefully much better at writing than 4.5 was."
+
+### Fact 12
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** The majority of effort for GPT‑5.2 will focus on intelligence, reasoning, coding, and engineering.
+**Source quote:** > "we put most of our effort in 5.2 into making it super good at intelligence, reasoning, coding, engineering."
+
+### Fact 13
+**Speaker:** Unifi CTO (unnamed)
+**Statement:** The limiting factor for running millions of agents for customers is cost.
+**Source quote:** > "the limiting factor for us to run millions, tens of millions, hundreds of millions of agents for our customers is cost."
+
+### Fact 14
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He predicts that by the end of 2027 OpenAI will be able to deliver a GPT‑5.2‑class model with high‑level intelligence.
+**Source quote:** > "I think we should be able to deliver sort of GPT 5.2x to x high level intelligence by the end of 2027."
+
+### Fact 15
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He expects cost reductions of at least 100× for future models.
+**Source quote:** > "anyone want to give a guess I would say at least 100x less."
+
+### Fact 16
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Current software interfaces were not built with agents in mind.
+**Source quote:** > "Current interfaces weren't built with agents in mind..."
+
+### Fact 17
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He anticipates that users will increasingly expect software to be generated on‑the‑fly for their specific problems.
+**Source quote:** > "I no longer think of software as this static thing. If I have a little problem, I expect the computer to like write some code right away and get it solved for me."
+
+### Fact 18
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** The fundamental rules of building a successful startup (user acquisition, GTM, stickiness, network effects, competitive advantage) have not changed despite AI advances.
+**Source quote:** > "none of that has changed ... you got to figure out a way to get users, you got to figure out a way to solve the GTM problem..."
+
+### Fact 19
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** A useful metric for startup durability is whether the company would be happy or sad if GPT‑6 were a wildly impressive update.
+**Source quote:** > "will your company be happy or sad if GPT6 is like a wildly impressive update?"
+
+### Fact 20
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He estimates that realistic timelines for autonomous agents running long workflows are task‑dependent and currently feasible for well‑specified tasks.
+**Source quote:** > "I think it really depends on the kind of task... if you have a very specific task that you understand very well try doing it today."
+
+### Fact 21
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He believes that AI will eventually be able to understand and use brand‑new tools after a single explanation.
+**Source quote:** > "the model can be presented with something totally new... you can explain it once and the model can explore it once and then just super reliably use that and get it right."
+
+### Fact 22
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He considers AI‑enabled bioterrorism and cyber‑security as serious risks that will require a resilience‑based approach rather than pure blocking.
+**Source quote:** > "AI is going to be a real problem for bioterrorism... we need to move from one of like blocking to one of resilience."
+
+### Fact 23
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He compares the current AI safety challenge to fire safety, stating that society should develop fire‑code‑like standards for AI.
+**Source quote:** > "we tried to do all of these things to restrict fire... we got better at resilience to fire and we came up with fire code and flame resistant materials."
+
+### Fact 24
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He asserts that keeping computers out of kindergarten is advisable and that young children should primarily engage with physical play.
+**Source quote:** > "I'm a fan of keeping computers out of kindergarten. Kindergarteners should be like running around outside and playing with physical things."
+
+### Fact 25
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He predicts that AI will increase the value of human connection and collaborative work.
+**Source quote:** > "I suspect that human connection is going to be more valuable in a world of lots of AI, not less..."
+
+### Fact 26
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He states that OpenAI will soon allow sign‑in with a ChatGPT account across services.
+**Source quote:** > "We are going to do that. People ask me for it all the time."
+
+### Fact 27
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He says OpenAI will push hard on memory and personalization, eventually allowing the model to understand a user's entire digital life.
+**Source quote:** > "we're going to push super hard on memory and personalization... at this point, I am ready for chat to just look at my whole computer and my whole internet and just know everything."
+
+### Fact 28
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He believes the most important future skills are high agency, idea generation, resilience, and adaptability.
+**Source quote:** > "These are the skills that may matter the most... become high agency, get good at generating ideas, be very resilient, be very adaptable."
+
+### Fact 29
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He envisions a future model that is 100× more capable, has 100× the context length, 100× the speed, and 100× reduced cost, with perfect tool‑calling and extreme coherence.
+**Source quote:** > "Assume we will have a model that is 100 times more capable than the current model with 100 times the context length that 100x the speed of the 100x reduced cost, perfect tool calling, extreme like coherence."
+
+### Fact 30
+**Speaker:** Alan (bioarma representative)
+**Statement:** He reports that generative AI has accelerated clinical trial document writing and is being explored for drug design, but 3D reasoning remains a challenge.
+**Source quote:** > "genai has been really helpful for clinical trial document writing... we are also trying to use it for drug design... one of the things we run into is 3D reasoning."
+
+### Fact 31
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He confirms that solving 3D reasoning is a known request and will be addressed, though other urgent areas have priority.
+**Source quote:** > "We will get that solved... it's a super common request and I think we know how to do it. We just have a lot of other urgent areas to push on, but we will get there."
+
+### Fact 32
+**Speaker:** Dan (former university student, W26 Y Combinator participant)
+**Statement:** He asks whether university is limiting for AI builders and whether OpenAI invests in angel rounds.
+**Source quote:** > "do you think university could be in its current state limiting sometimes and second is do angel invest?"
+
+### Fact 33
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He advises that university may not be the best use of time for AI builders currently, and that he does not personally invest in companies that are OpenAI customers.
+**Source quote:** > "I think this is a time where for if you are an AI builder, it is probably not the best use of your time to be in university right now... and I don't personally... invest in companies that are big OpenAI customers."
+
+### Fact 34
+**Speaker:** Michael (OS employee)
+**Statement:** He requests a feature to allow sign‑in with a ChatGPT account, including token budget and memory sharing.
+**Source quote:** > "I have a feature request for you which is sign in with my chat GBT account... people be able to bring their own token budget or bring their chatbt memories..."
+
+### Fact 35
+**Speaker:** Oleg (software development perspective)
+**Statement:** He notes that internal policies at most companies have not yet adapted to a majority‑AI co‑worker environment.
+**Source quote:** > "the internal policies that have built up at most companies did not contemplate a majority AI co‑workers."
+
+### Fact 36
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He says OpenAI will continue hiring software engineers but will slow down growth to align with AI‑augmented productivity.
+**Source quote:** > "we're going to keep hiring software developers... we are planning to dramatically slow down how quickly we grow..."
+
+### Fact 37
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He believes software engineering interviews have been bad for a long time and are now even less relevant.
+**Source quote:** > "software engineering interviews have been bad for a long time and maybe not that relevant but now they're even less relevant."
+
+### Fact 38
+**Speaker:** Cole (creator, cinematographer)
+**Statement:** He observes that consumers report higher appreciation for images known to be created by humans versus AI.
+**Source quote:** > "consumers of images report dramatically higher appreciation ... if they are told a person made it versus an AI."
+
+### Fact 39
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He notes that the term "clanker" is a popular slur for AI among creators.
+**Source quote:** > "of all the slurs for AI, clanker is my favorite one."
+
+### Fact 40
+**Speaker:** Keith Curry (recent graduate)
+**Statement:** He asks about evolving memory granularity and grouping (work vs personal) for AI personalization.
+**Source quote:** > "how do you see that evolving over time? ... grouping memories? this is my work identity, this is my personal identity."
+
+### Fact 41
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He confirms OpenAI will push hard on memory and personalization, aiming for models that can access a user's entire digital footprint.
+**Source quote:** > "people want it and it delivers a way better way to use these tools... I am ready for chat to just look at my whole computer and my whole internet and just know everything."
+
+### Fact 42
+**Speaker:** Luan (international school student)
+**Statement:** He asks what the most important skill to learn in the age of AI is.
+**Source quote:** > "what do you think is the most important skill that people should learn in the age of AI?"
+
+### Fact 43
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He answers that soft skills—high agency, idea generation, resilience, adaptability—will be most important and are learnable.
+**Source quote:** > "These are the skills that may matter the most... become high agency, get good at generating ideas, be very resilient, be very adaptable."
+
+---
+**Total facts extracted:** 43
+**File saved to:** `output/2026-03-29_15-34-19/facts_raw.md`
+</file>
+
+<file path="facts.md">
+# Important Facts
+
+### Fact 1
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** Future versions of GPT‑5.x will improve writing quality compared to 4.5.
+**Source quote:** > "we will make future versions of GPT 5.x hopefully much better at writing than 4.5 was."
+
+### Fact 2
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** The majority of effort for GPT‑5.2 will focus on intelligence, reasoning, coding, and engineering.
+**Source quote:** > "we put most of our effort in 5.2 into making it super good at intelligence, reasoning, coding, engineering."
+
+### Fact 3
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI aims to deliver a GPT‑5.2‑class model with high‑level intelligence by the end of 2027.
+**Source quote:** > "I think we should be able to deliver sort of GPT 5.2x to x high level intelligence by the end of 2027."
+
+### Fact 4
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI expects future models to cost at least 100× less than current ones.
+**Source quote:** > "anyone want to give a guess I would say at least 100x less."
+
+### Fact 5
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI will add sign‑in with a ChatGPT account across services.
+**Source quote:** > "We are going to do that. People ask me for it all the time."
+
+### Fact 6
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI will push hard on memory and personalization, eventually allowing the model to understand a user's entire digital life.
+**Source quote:** > "we're going to push super hard on memory and personalization... I am ready for chat to just look at my whole computer and my whole internet and just know everything."
+
+### Fact 7
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** The known 3D‑reasoning challenge for drug‑design workflows will be solved, though other urgent areas have higher priority.
+**Source quote:** > "We will get that solved... it's a super common request and I think we know how to do it. We just have a lot of other urgent areas to push on, but we will get there."
+
+### Fact 8
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He will not personally invest in companies that are large OpenAI customers, and advises that university may not be the best use of time for AI builders right now.
+**Source quote:** > "I think this is a time where for if you are an AI builder, it is probably not the best use of your time to be in university right now... and I don't personally... invest in companies that are big OpenAI customers."
+
+### Fact 9
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** OpenAI will continue hiring software engineers but will dramatically slow the rate of hiring to align with AI‑augmented productivity.
+**Source quote:** > "we're going to keep hiring software developers... we are planning to dramatically slow down how quickly we grow..."
+
+### Fact 10
+**Speaker:** Sam Altman (host/CEO)
+**Statement:** He recommends keeping computers out of kindergarten, emphasizing physical play for young children.
+**Source quote:** > "I'm a fan of keeping computers out of kindergarten. Kindergarteners should be like running around outside and playing with physical things."
+</file>
+
+</files>
