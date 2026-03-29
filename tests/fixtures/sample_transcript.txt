@@ -1,0 +1,35 @@
+Meeting: Q1 Sprint Retrospective
+Date: 2026-03-15
+Participants: Alice (PM), Bob (Tech Lead), Carol (Developer), Dave (QA)
+
+Alice: Let's start with what went well this sprint. Bob, you mentioned the API redesign?
+
+Bob: Yes, we completed the API v2 migration ahead of schedule. The team delivered 47 story points, which is 15% above our average velocity of 41 points. The new caching layer reduced response times by 60%.
+
+Carol: The pair programming sessions were really effective. We caught 3 critical bugs during code review that would have been expensive to fix in production. I think the estimated cost savings are around $15,000.
+
+Dave: On the QA side, we achieved 94% test coverage on the new modules. However, I need to flag that our end-to-end test suite takes 45 minutes to run now, which is blocking CI/CD.
+
+Alice: That's a good point, Dave. What about challenges?
+
+Bob: The biggest issue was the database migration. We had 2 hours of unplanned downtime on March 8th because the migration script wasn't tested against production-scale data. We need a staging environment that mirrors production.
+
+Carol: I agree with Bob. Also, the documentation for the new API endpoints is incomplete. Only 60% of the endpoints have proper Swagger docs. External partners have complained twice this sprint.
+
+Dave: The flaky tests are getting worse. We have 12 intermittent test failures that waste about 3 hours per developer per week. That's roughly 12 hours of engineering time wasted weekly across the team.
+
+Alice: Let's talk about what we should do next sprint.
+
+Bob: I propose we invest 2 sprints into building a proper staging environment. It would cost about $5,000/month in infrastructure but would prevent incidents like the March 8th downtime. I estimate it could save us 10 hours of incident response per month.
+
+Carol: We should set a hard rule: no PR gets merged without complete API documentation. I can create a documentation template and a CI check for it. This should take about 3 days of work.
+
+Dave: For the flaky tests, I'd suggest dedicating a full sprint to test infrastructure. We should containerize our test environment and implement retry logic for known infrastructure-dependent tests. This would reduce CI time from 45 to under 15 minutes.
+
+Alice: Great suggestions. Any other concerns?
+
+Bob: Yes, I'm worried about the upcoming security audit in Q2. We haven't updated our dependency tree in 4 months. There are 8 known vulnerabilities in our current dependencies, 2 of which are rated critical.
+
+Carol: Also, we should consider adopting TypeScript for the frontend. The current JavaScript codebase has been the source of 40% of our production bugs this quarter.
+
+Alice: Thank you all. Let me summarize the key action items and we'll prioritize them in the next planning session.

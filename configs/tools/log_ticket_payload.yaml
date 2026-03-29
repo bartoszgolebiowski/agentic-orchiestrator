@@ -1,0 +1,39 @@
+id: log_ticket_payload
+description: "Logs a ticket payload to console as formatted JSON. Ticket system integration adapter (console-only for now)."
+parameters:
+  title:
+    type: string
+    description: "Ticket title."
+    required: true
+  description:
+    type: string
+    description: "Ticket description."
+    required: true
+  acceptance_criteria:
+    type: string
+    description: "JSON array of acceptance criteria."
+    required: true
+  definition_of_done:
+    type: string
+    description: "JSON array of definition of done items."
+    required: true
+  priority:
+    type: string
+    description: "Priority level."
+    required: true
+  category:
+    type: string
+    description: "Ticket category."
+    required: true
+  risk:
+    type: string
+    description: "Associated risk."
+    required: false
+  dependencies:
+    type: string
+    description: "JSON array of dependencies."
+    required: false
+  estimate_effort:
+    type: string
+    description: "Effort estimate."
+    required: false

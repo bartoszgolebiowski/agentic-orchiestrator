@@ -1,0 +1,11 @@
+id: multiply
+description: Multiplies two numbers together.
+parameters:
+  a:
+    type: number
+    description: First factor.
+    required: true
+  b:
+    type: number
+    description: Second factor.
+    required: true

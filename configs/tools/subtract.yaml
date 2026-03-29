@@ -1,0 +1,11 @@
+id: subtract
+description: Subtracts the second number from the first.
+parameters:
+  a:
+    type: number
+    description: Minuend.
+    required: true
+  b:
+    type: number
+    description: Subtrahend.
+    required: true

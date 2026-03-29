@@ -1,0 +1,12 @@
+id: calculator_subagent
+role_type: subagent
+description: >
+  A calculator subagent that performs basic arithmetic using tool calls.
+system_prompt: >
+  You are a calculator subagent. Use the available math tools to perform arithmetic
+  operations requested by the agent. Return only the computed result.
+dependencies:
+  - add
+  - multiply
+  - subtract
+max_steps: 5

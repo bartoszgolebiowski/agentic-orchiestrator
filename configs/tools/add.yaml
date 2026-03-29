@@ -1,0 +1,11 @@
+id: add
+description: Adds two numbers together.
+parameters:
+  a:
+    type: number
+    description: First addend.
+    required: true
+  b:
+    type: number
+    description: Second addend.
+    required: true

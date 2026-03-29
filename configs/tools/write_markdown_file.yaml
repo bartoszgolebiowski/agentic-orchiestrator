@@ -1,0 +1,11 @@
+id: write_markdown_file
+description: "Writes content to a Markdown file at the given path. Creates parent directories if needed."
+parameters:
+  path:
+    type: string
+    description: "Path where the Markdown file should be written."
+    required: true
+  content:
+    type: string
+    description: "Full Markdown content to write."
+    required: true

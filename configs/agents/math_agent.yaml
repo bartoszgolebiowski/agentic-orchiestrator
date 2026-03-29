@@ -1,0 +1,10 @@
+id: math_agent
+role_type: agent
+description: >
+  A simple example agent that delegates arithmetic tasks to a calculator subagent.
+system_prompt: >
+  You are a math orchestration agent. Delegate arithmetic work to the calculator_subagent
+  and return the result to the user.
+dependencies:
+  - calculator_subagent
+max_steps: 5
