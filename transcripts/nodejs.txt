@@ -1,0 +1,414 @@
+Um, welcome to the Node API team meeting
+on
+um, February 20th, 2026.
+And I'm going to share my screen.
+Um, can you see my screen? It should be
+the PI team for Jetbot. All right, cool.
+Um we haven't have any um new the um
+landed progress in the past two weeks. I
+think we can
+um several meetings in the past two
+weeks. So, but we do have some new poll
+requests
+and
+before we jump into the list, um do you
+have anything in particular that you uh
+we would like we can talk about first?
+>> Uh we can I was just given some
+thoughts. I didn't do much about this uh
+node RT main like a third one in this
+list. So um
+because I was like thinking about this
+prefix and I was planning to uh send
+this uh issue but um you know I think
+like what if we do this prefix saying
+node and score embed I think at some
+point uh changing jun you were saying
+that it should be good what do you think
+instead of node embedding it will be
+node embed
+Um
+yeah to be honest I would be fine with
+both like node embed or node embedding.
+>> Okay Kevin what
+>> I would also be fine with node embed.
+So I tried like yesterday I played what
+I call it with my friendly I we played
+with his ideas and uh and it sounds like
+u like you me like we'll have like node
+embed inv
+platform node embed platform create node
+embed platform destroy it all kind of
+even it even sounds it especially it's
+written it looks good in relatively
+short and it's definitely kind of not so
+confusing as RT I I tend to agree now
+like LT was probably not not the best
+choice.
+The only question like I see uh the
+author of this PR changed uh from um
+from function called main uh they
+changed to to start and I guess it's
+mostly because uh uh current C++ API
+using also kind of verb start. Do you
+guys have any preference should be embed
+main or embed start?
+Well,
+I
+don't feel strongly about a main or
+start, but I think the
+one advantage of the start is that it
+indicates that it can be called from non
+main thread
+and it's not strictly
+speaking. it has to be the main function
+of the program.
+So
+I would just say that start might be a
+better slightly better than main in my
+opinion.
+>> Okay.
+>> I would agree with start.
+>> Okay. So let me um so since it's settled
+like and since like a so let me kind of
+propose to author to change it to note
+embed start and also uh we'll do changes
+for um other file names and stuff. So
+thinkly I will kind of get rid of this
+uh so even file name will be instead of
+node runtime API it will be node embed
+API node embed
+and stuff like so thinkly it sounds like
+node embed it's it's relatively good
+prefix right
+>> okay
+>> um were you are you going to recommend
+on the progress in that case I'll defer
+it to you
+>> um yeah like let me um because last time
+The way we've done it like I created
+this uh uh branch and I kind of
+commented on this pull request and asked
+author if they they would consider to to
+merge it.
+I I'll just comment that we've been
+discussing this uh node API meeting. We
+agreed that node embed will be good
+prefix and node embed start will be good
+name for this function.
+>> Cool. Thank you very much.
+Any
+other um
+any more comments in this pest?
+>> No.
+>> Cool. Thank you very much for um
+following up with this pest.
+Um
+I think two pests that I would like to
+bring up u will be this one and this
+one. it was from the um original
+um author of the issue who submit here
+the um new variant of the API stream
+constructor.
+So I think the only issue that I found
+with the progress is that the tester was
+failing and they also said that they
+found the local compilation was too
+slow.
+So I submitted a progress to document
+how to build the project um test addon
+with Ninja which will be way more faster
+locally because the parallelism
+algorithm of Ninja is way much better
+than make in my personal opinion. Um but
+anyway this is a alternative u workflow
+to the
+CI and the mpm test command. So what we
+are going to do here is that we are um
+there is a alternative workflow. You can
+do it um locally in your local workflow,
+but we are not going to change the mpm
+test and the CI workflow because
+the make
+is still the default option for NodeJip.
+So
+yeah, if you have your if you have Ninja
+installed locally, you can use this
+alternative workflow. And yeah, that's I
+I feel like this is this might be the
+best approach that we can um recommend
+to people who
+are
+willing to test out with different um
+like um different build tools.
+>> Yes. So I was able to run this and
+everything was fine and looked great.
+The only question that I had was should
+we link
+this document somewhere
+in our like main contributing
+>> MD or are we just expecting people to
+find this file by going into the
+repositories folder of doc contributing?
+I feel like we don't have many
+contributing documentation in current
+contributing.
+>> Correct. The only other one was creating
+a release which
+>> is primarily for our team really you
+know because we're the ones who create
+the releases whereas this other document
+is
+mostly for anybody that actually wants
+to contribute. So
+>> yeah,
+>> I I I don't know whether it's just
+something that I wanted to bring up that
+we could either do it or not, but from
+the technical aspect of what's in the
+document, that looks good. That's
+correct.
+Yeah, I feel like the
+um maybe I can link
+um to the document here in this section
+because in this section we mentioned
+that how to run the test um steps.
+>> Yeah, because this I think is where
+people would find how to run the tests
+and then they would do npm install npm
+tests and they're like I guess this is
+it. That's the only way to do it. So
+maybe it'd be good to have a link there.
+Yeah.
+>> Yeah. Thank you for the suggestion. I
+think I can link to the docu new
+document in this section so it can be
+more discoverable.
+Thank you.
+>> Mhm.
+And for the um
+new
+um function
+signatures, please take a look at this
+um p request. I think the tests are
+failing, but it should be easy to fix.
+I actually think authors uses C++
+version. um C++ approach typically is to
+check u capability
+because um even if you have some certain
+C++ version but different compilers may
+not implement certain features
+um
+>> right
+>> it will be more
+>> another thing that I think it's worth
+mention might be that
+the
+not just as minimum C++ version set in
+right
+common
+and this will be included by NodeJ by
+default
+yeah for example we set C++ 20 here
+>> right and I think that's what we had
+discussed
+when
+maybe the issue was first created or
+maybe when the pull request was I I
+don't remember but we did we did discuss
+and we were like well what's the minimum
+version and since it's 20 here I think
+that no the there we shouldn't have the
+check at all in no add on API
+>> that's
+>> yeah but for the minimum supported like
+no just version I think we can refer to
+um
+20.
+No, 20 might not be
+might not set this um definition.
+22 should set this. Yeah, 22 set 20
+>> for Microsoft. But uh what do we kind of
+set up like for other
+>> I think this um
+>> oh yeah
+>> this argument is set in pairs.
+>> Oh yes yes okay.
+>> So for CN set this for MSVC we set this.
+>> Okay.
+>> Yeah. So I think we should just comment
+and say remove those
+>> guards in the pull request. But
+technically speaking, plugins can be
+compiled with different compiler or yeah
+because if you're using jeep, you're
+right this case.
+>> Yeah, if you use no jeep, it will
+include this file automatically and it
+will set minimum language standard to 20
+>> is a registryable
+drip using this common GPA.
+>> Yes. Um, it's implicitly included by
+NodeJip.
+>> I see.
+So, plugins using the same same GP file.
+>> Um,
+for common JP, yes.
+>> Okay.
+So, we can reduce complexity by removing
+this. Yeah, I feel like so
+>> I just know like it's better not to
+check version. It's better to check
+either feature or like
+>> um
+yeah um
+I feel um would you mind commenting on
+the progress so that um
+it'll be checked on this thread.
+Okay.
+Also given that the tester is failing. I
+feel like the tester is failing because
+of this version guard. I don't know um
+if we need to set anything in the CI to
+make test happy here.
+>> What may happen like we maybe testing
+with older versions. Is it possible?
+>> But all the 24 and 25s
+are failing as well.
+It could be that that macroprocessor of
+CPP whatever that he's using is not
+defined
+or he could and then we don't include
+the f but then it wouldn't compile here.
+It's a JavaScript issue.
+Yeah. H something's a miss. Hopefully
+with that new document he'll be able to
+and run these tests locally.
+>> Yep.
+All right. I think yeah, please take a
+look at this the progress. I feel like
+the progress should be small enough
+like
+15 and 30 uh 50 and 30 lines
+and please take a look. Thank you.
+Anything
+else in the in progress um list that we
+can discuss?
+>> Just we just discussed this one and next
+one I didn't do I mean I start to work
+on but I didn't complete this PRs which
+I plan to.
+>> Yeah, no worries.
+So still work in progress
+this week.
+>> I don't think we have anything back from
+Ken. We can skip it.
+Um in the church list, I think we talked
+about this one. I'm going to update the
+progress with the link in the test
+section.
+So I'm going to move it to the in
+progress list
+and the rest
+dependency upgrades um automatically
+generated progress.
+I think I will probably batch this
+procast procast into one single version
+so that we'll be able to reduce the
+noise
+generated by this um automated generated
+procast.
+Um
+it seems like we are
+at the bottom of the list.
+Anything else
+we can discuss today?
+Um I wanted to talk about the first
+entry in the to-do with the user
+provided executed before draining the
+queue. Um, and we did discuss this when
+I think it was two weeks ago or whatever
+whenever I was in the meeting and we
+sort of went over what the current
+um implementation is and I was wondering
+if we were to change the order of when
+the thread safe functions finalizer is
+called so that it is called after the Q
+drains.
+Would that be a bug fix or a breaking
+change?
+Um
+I think if it's user observable it might
+be a breaking change but it depends on
+if it fix a
+um
+like if it if the original
+um order would crash and we changed the
+order and make it not crash. I feel like
+it will not be a freaking change because
+it fixed a um condition that it leads to
+a bug and crash. So I feel like it
+depends on how the current behavior.
+>> Okay.
+>> Like
+>> the the current behavior would be that
+it would be a crash because you in your
+finalizer you would like free the memory
+of your context
+but the context is not in the thread
+safe function is not set to null pointer
+or anything afterwards. So then when
+your queue is drained, you get an
+address of your context that is no
+longer valid because it's been deleted.
+So that would be the current behavior.
+You'd get a crash for that and then when
+you with the changing of the order, it
+would no longer crash. So I think it
+would be considered a bug fix.
+Yeah, in that case I think it could be a
+bug fix rather than a um picking gen.
+But it'll be great to have tests test
+coverage for this.
+>> Okay. Um, I should be able to create a
+test that
+crashes
+and then have an implementation that
+fixes it so that we can see that it no
+longer crashes
+>> and then once it's reviewed then we can
+do some squashing of commits or
+whatever. Okay. Yep.
+>> Yeah. I feel like that would be the best
+approach like first um adding a test
+that's crashing with the current
+implementation and then we'll fix it.
+>> Yeah.
+>> Okay. Sounds good to me.
+>> Cool. Thank you very much.
+>> Anything else we can discuss today?
+So this there is another kind of did I
+miss it like this with add kind of date
+new overload or this same stuff.
+>> Um there are two p requests in the not
+API for
+um each of this issue. So but they are
+from the same author.
+>> Mhm.
+>> So
+>> Oh it's the same stuff right? Okay. not
+the same stuff but they are from the
+same author for the um similar concept
+that adding new um overload for new C++
+um data types
+but one is for string view and another
+one is for the date cor um system clock
+>> okay
+Yes.
+Um, so it seems like we can end early
+and return the remaining 30 minutes back
+to you and I'll see you on GitHub and
+see you on next week. Have a good
+weekend.
+>> Righty. Chow chow. Bye. Bye.
+>> Bye. Bye.

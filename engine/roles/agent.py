@@ -87,6 +87,7 @@ class AgentPlanner:
                 max_steps=self.config.max_steps,
                 model=self.config.model or self.model,
                 allow_thought_as_final=self.config.id != "transcript_analyst",
+                required_pipeline=self.config.required_pipeline,
             )
 
             result = await loop.run(task)

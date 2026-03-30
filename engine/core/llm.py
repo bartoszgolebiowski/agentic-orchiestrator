@@ -50,12 +50,14 @@ async def chat_completion(
     model: str | None = None,
     trace_name: str | None = None,
     trace_metadata: dict[str, Any] | None = None,
+    temperature: float = 0.0,
 ) -> Any:
     """Raw chat completion — used only by SubagentExecutor (native tool calls)."""
     model_name = model or get_model()
     kwargs: dict[str, Any] = {
         "model": model_name,
         "messages": messages,
+        "temperature": temperature,
     }
     if tools:
         kwargs["tools"] = tools
@@ -94,6 +96,7 @@ async def structured_completion(
     model: str | None = None,
     trace_name: str | None = None,
     trace_metadata: dict[str, Any] | None = None,
+    temperature: float = 0.0,
 ) -> Any:
     """Native structured-output completion — returns a validated Pydantic model."""
     model_name = model or get_model()
@@ -109,6 +112,7 @@ async def structured_completion(
                 model=model_name,
                 input=messages,
                 text_format=response_model,
+                temperature=temperature,
             )
         except BadRequestError as exc:
             error_text = str(exc).lower()

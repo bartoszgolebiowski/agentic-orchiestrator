@@ -88,7 +88,7 @@ class Orchestrator:
         else:
             agent_id = agent_id.value
 
-        task = decision.task or user_query
+        task = decision.task
 
         if agent_id not in self._agent_planners:
             return f"Error: Unknown agent '{agent_id}'"

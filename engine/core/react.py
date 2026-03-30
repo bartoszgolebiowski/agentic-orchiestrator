@@ -130,11 +130,22 @@ class StructuredReActLoop:
     max_steps: int = 10
     model: str | None = None
     allow_thought_as_final: bool = True
+    required_pipeline: list[str] = field(default_factory=list)
 
     _messages: list[dict[str, Any]] = field(default_factory=list, init=False)
     _steps: list[StepResult] = field(default_factory=list, init=False)
+    _completed_subagents: list[str] = field(default_factory=list, init=False)
 
     def _init_messages(self, task: str) -> None:
+        pipeline_instruction = ""
+        if self.required_pipeline:
+            stages = ", ".join(f"'{s}'" for s in self.required_pipeline)
+            pipeline_instruction = (
+                f"\n\nMANDATORY PIPELINE: You MUST delegate to these subagents in this exact order: "
+                f"{stages}. Do NOT produce a final_answer until ALL of these have been called and "
+                f"returned successfully. Each stage must complete before starting the next one."
+            )
+
         enhanced_prompt = (
             f"{self.system_prompt}\n\n"
             f"Available subagents you can delegate to:\n{self.available_actions}\n\n"
@@ -143,8 +154,9 @@ class StructuredReActLoop:
             f"- action: null or an object with exactly {{\"subagent_id\": string, \"task\": string}}\n"
             f"- final_answer: null or string\n\n"
             f"Use action as an object, not as a JSON string. Use the exact field name subagent_id.\n"
-            f"Important: emit exactly one action per response at most. Do not batch multiple actions, \
-multiple subagents, or multiple stages in one turn. If more work is needed, wait for the next turn."
+            f"Important: emit exactly one action per response at most. Do not batch multiple actions, "
+            f"multiple subagents, or multiple stages in one turn. If more work is needed, wait for the next turn."
+            f"{pipeline_instruction}"
         )
         self._messages = [
             {"role": "system", "content": enhanced_prompt},
@@ -161,6 +173,7 @@ multiple subagents, or multiple stages in one turn. If more work is needed, wait
     async def run(self, task: str) -> str:
         self._init_messages(task)
         self._steps = []
+        self._completed_subagents = []
 
         for step_num in range(1, self.max_steps + 1):
             logger.info(f"StructuredReAct step {step_num}/{self.max_steps}")
@@ -199,6 +212,35 @@ multiple subagents, or multiple stages in one turn. If more work is needed, wait
                 final_answer = None
 
             if final_answer is not None:
+                # Pipeline enforcement: reject premature final_answer
+                if self.required_pipeline:
+                    missing = [s for s in self.required_pipeline if s not in self._completed_subagents]
+                    if missing:
+                        next_stage = missing[0]
+                        logger.warning(
+                            f"  Pipeline enforcement: LLM tried to finish but {len(missing)} "
+                            f"required stages remain: {missing}. Forcing delegation to '{next_stage}'."
+                        )
+                        self._messages.append({
+                            "role": "assistant",
+                            "content": f"Thought: {step.thought}",
+                        })
+                        self._messages.append({
+                            "role": "user",
+                            "content": (
+                                f"PIPELINE VIOLATION: You cannot produce a final answer yet. "
+                                f"The following mandatory stages have NOT been executed: {missing}. "
+                                f"You MUST delegate to '{next_stage}' now. "
+                                f"Continue the pipeline from where you left off."
+                            ),
+                        })
+                        self._steps.append(StepResult(
+                            thought=step.thought,
+                            action=None,
+                            observation=f"Pipeline enforcement: redirected to {next_stage}",
+                        ))
+                        continue
+
                 logger.info(f"  Final answer: {final_answer[:200]}")
                 self._steps.append(StepResult(
                     thought=step.thought,
@@ -220,6 +262,16 @@ multiple subagents, or multiple stages in one turn. If more work is needed, wait
                 except Exception as e:
                     observation = f"ERROR: {type(e).__name__}: {e}"
                     logger.error(f"  Action failed: {observation}")
+
+                # Track completed subagent for pipeline enforcement
+                if action_name in self.required_pipeline and action_name not in self._completed_subagents:
+                    if not observation.startswith("ERROR:"):
+                        self._completed_subagents.append(action_name)
+                        remaining = [s for s in self.required_pipeline if s not in self._completed_subagents]
+                        logger.info(
+                            f"  Pipeline progress: completed '{action_name}'. "
+                            f"Remaining: {remaining if remaining else 'none (pipeline complete)'}"
+                        )
 
                 logger.info(f"  Observation: {observation[:200]}")
 

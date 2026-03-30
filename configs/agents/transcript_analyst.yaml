@@ -65,4 +65,10 @@ dependencies:
   - conclusions_analyst
   - action_point_generator
   - grounding_auditor
+required_pipeline:
+  - facts_extractor
+  - facts_filterer
+  - conclusions_analyst
+  - action_point_generator
+  - grounding_auditor
 max_steps: 24

@@ -144,6 +144,13 @@ class NodeConfig(BaseModel):
     description: str
     system_prompt: str
     dependencies: list[str] = Field(default_factory=list)
+    required_pipeline: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Ordered list of subagent IDs that MUST be invoked (in order) before "
+            "the agent is allowed to produce a final answer. Empty means no enforcement."
+        ),
+    )
     max_steps: int = Field(default=10, ge=1, le=50)
     model: str | None = Field(default=None, description="LLM model override for this node. Falls back to env LLM_MODEL if not set.")
 
@@ -157,6 +164,12 @@ class NodeConfig(BaseModel):
             raise ValueError(
                 f"Subagent '{self.id}' must declare at least one tool dependency"
             )
+        for step in self.required_pipeline:
+            if step not in self.dependencies:
+                raise ValueError(
+                    f"Node '{self.id}' required_pipeline references '{step}' "
+                    f"which is not in dependencies"
+                )
         return self
 
 
