@@ -4,7 +4,7 @@ import json
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, AliasChoices, model_validator
+from pydantic import BaseModel, ConfigDict, Field, AliasChoices, model_validator
 
 from engine.mcp.models import McpServerConfig
 
@@ -14,11 +14,27 @@ class RoleType(str, Enum):
     SUBAGENT = "subagent"
 
 
+class ModelSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    module: str
+    name: str
+
+    @model_validator(mode="after")
+    def validate_spec(self) -> "ModelSpec":
+        if not self.module.strip():
+            raise ValueError("ModelSpec.module cannot be empty")
+        if not self.name.strip():
+            raise ValueError("ModelSpec.name cannot be empty")
+        return self
+
+
 # ─── Instructor Response Models ───
 
 
 class RoutingDecision(BaseModel):
     """Orchestrator's structured routing decision."""
+    model_config = ConfigDict(extra="forbid")
     agent_id: str = Field(
         description="The ID of the selected agent.",
         validation_alias=AliasChoices("agent_id", "target_agent", "targetAgent"),
@@ -28,16 +44,56 @@ class RoutingDecision(BaseModel):
         default="",
         description="The task to pass to the selected agent, reformulated if needed.",
     )
+    input_json: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional structured input to pass to the selected agent.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_input_json(cls, values: Any) -> Any:
+        if not isinstance(values, dict):
+            return values
+        input_json = values.get("input_json")
+        if isinstance(input_json, str):
+            try:
+                parsed = json.loads(input_json)
+            except Exception:
+                return values
+            if isinstance(parsed, dict):
+                values["input_json"] = parsed
+        return values
 
 
 class DelegationAction(BaseModel):
     """An action where an Agent delegates a sub-task to a Subagent."""
+    model_config = ConfigDict(extra="forbid")
     subagent_id: str = Field(description="The ID of the subagent to delegate to.")
     task: str = Field(description="The specific sub-task to delegate.")
+    input_json: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional structured input to pass to the subagent.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_input_json(cls, values: Any) -> Any:
+        if not isinstance(values, dict):
+            return values
+        input_json = values.get("input_json")
+        if isinstance(input_json, str):
+            try:
+                parsed = json.loads(input_json)
+            except Exception:
+                return values
+            if isinstance(parsed, dict):
+                values["input_json"] = parsed
+        return values
 
 
 class AgentReActStep(BaseModel):
     """A single ReAct reasoning step for an Agent (planning layer)."""
+    model_config = ConfigDict(extra="forbid")
     thought: str = Field(description="Your reasoning about the current state and what to do next.")
     action: DelegationAction | None = Field(
         default=None,
@@ -69,6 +125,13 @@ class AgentReActStep(BaseModel):
         elif isinstance(action, dict) and "subagent" in action and "subagent_id" not in action:
             action = dict(action)
             action["subagent_id"] = action.pop("subagent")
+            if isinstance(action.get("input_json"), str):
+                try:
+                    parsed_input = json.loads(action["input_json"])
+                except Exception:
+                    parsed_input = None
+                if isinstance(parsed_input, dict):
+                    action["input_json"] = parsed_input
             values["action"] = action
 
         return values
@@ -92,6 +155,16 @@ class ToolDefinition(BaseModel):
     id: str
     description: str
     parameters: dict[str, ToolParameter] = Field(default_factory=dict)
+
+
+class StructuredOutputContractConfig(BaseModel):
+    id: str
+    description: str
+    schema_path: str
+    instructions: str
+    model: str | None = Field(default=None, description="Optional LLM model override for this contract.")
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    max_attempts: int = Field(default=2, ge=1, le=5)
 
 
 class NodeConfig(BaseModel):
@@ -121,10 +194,6 @@ class NodeConfig(BaseModel):
             raise ValueError(
                 f"Agent '{self.id}' cannot declare mcp_dependencies"
             )
-        if self.role_type == RoleType.SUBAGENT and not self.dependencies:
-            raise ValueError(
-                f"Subagent '{self.id}' must declare at least one tool dependency"
-            )
         for step in self.required_pipeline:
             if step not in self.dependencies:
                 raise ValueError(
@@ -139,7 +208,7 @@ class OrchestratorConfig(BaseModel):
         default=(
             "You are an orchestrator. Analyze the user query and select the single "
             "most competent agent to handle it. Respond with a JSON object containing "
-            "'agent_id' and 'task' fields."
+            "'agent_id', 'task', and optional 'input_json' fields."
         )
     )
     max_steps: int = Field(default=1)

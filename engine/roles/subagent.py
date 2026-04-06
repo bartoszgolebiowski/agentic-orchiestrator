@@ -79,8 +79,10 @@ class SubagentExecutor:
             sections.append("MCP tools:\n" + "\n".join(mcp_descriptions))
         return "\n\n".join(sections)
 
-    async def execute(self, task: str) -> str:
+    async def execute(self, task: str, input_json: Any | None = None) -> str:
         logger.info(f"SubagentExecutor[{self.config.id}] starting task: {task[:100]}")
+
+        system_prompt = self.config.system_prompt
 
         local_tool_specs, local_descriptions, local_allowed_ids = self._build_local_tool_specs()
         mcp_tool_specs, mcp_descriptions, mcp_allowed_ids = await self._build_mcp_tool_context()
@@ -148,19 +150,19 @@ class SubagentExecutor:
         with observe(
             name=f"subagent-plan:{self.config.id}",
             as_type="span",
-            input={"task": task, "subagent_id": self.config.id},
+            input={"task": task, "subagent_id": self.config.id, "input_json": input_json},
             metadata={"component": "subagent", "subagent_id": self.config.id},
         ) as subagent_span:
             loop = ReActLoop(
                 client=self.client,
-                system_prompt=self.config.system_prompt,
+                system_prompt=system_prompt,
                 tools_spec=tool_specs,
                 action_handler=handle_action,
                 max_steps=self.config.max_steps,
                 model=self.config.model or self.model,
             )
 
-            result = await loop.run(task)
+            result = await loop.run(task, input_json=input_json)
             if subagent_span is not None:
                 subagent_span.update(output=result)
             return result

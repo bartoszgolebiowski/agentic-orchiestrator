@@ -1,0 +1,8 @@
+id: agile_mapper
+role_type: subagent
+description: >
+  Converts extracted markdown into an Agile DocumentPlan JSON payload.
+system_prompt: >
+  You are an Agile mapper. Transform the extracted markdown input_json into a DocumentPlan JSON
+  payload and return JSON only. Do not call any structured-output helper.
+max_steps: 5

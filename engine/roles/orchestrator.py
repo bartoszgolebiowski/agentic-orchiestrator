@@ -60,7 +60,7 @@ class Orchestrator:
             ),
         )
 
-    async def handle(self, user_query: str) -> str:
+    async def handle(self, user_query: str, input_json: dict[str, Any] | None = None) -> str:
         logger.info(f"Orchestrator received query: {user_query[:200]}")
 
         messages = [
@@ -94,6 +94,13 @@ class Orchestrator:
 
         task = decision.task
 
+        effective_input_json: dict[str, Any] | None = decision.input_json
+        if input_json is not None:
+            if isinstance(effective_input_json, dict):
+                effective_input_json = {**effective_input_json, **input_json}
+            else:
+                effective_input_json = input_json
+
         if agent_id not in self._agent_planners:
             return f"Error: Unknown agent '{agent_id}'"
 
@@ -103,10 +110,10 @@ class Orchestrator:
         with observe(
             name=f"agent-run:{agent_id}",
             as_type="span",
-            input={"task": task, "agent_id": agent_id},
+            input={"task": task, "agent_id": agent_id, "input_json": effective_input_json},
             metadata={"component": "orchestrator", "agent_id": agent_id},
         ) as agent_span:
-            result = await planner.plan_and_execute(task)
+            result = await planner.plan_and_execute(task, input_json=effective_input_json)
             if agent_span is not None:
                 agent_span.update(output=result)
 

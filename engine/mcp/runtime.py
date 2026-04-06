@@ -266,12 +266,15 @@ class McpManager:
         return self._runtimes[server_id]
 
     async def describe_tools(self, server_ids: Sequence[str]) -> list[ResolvedMcpTool]:
-        resolved: list[ResolvedMcpTool] = []
-        seen_servers = dict.fromkeys(server_ids)
+        seen_servers = list(dict.fromkeys(server_ids))
 
-        for server_id in seen_servers:
-            runtime = self._get_runtime(server_id)
-            tools = await runtime.list_tools()
+        # Parallel discovery across all requested servers
+        discovery_results = await asyncio.gather(
+            *(self._get_runtime(sid).list_tools() for sid in seen_servers)
+        )
+
+        resolved: list[ResolvedMcpTool] = []
+        for tools in discovery_results:
             for tool in tools:
                 existing = self._tool_index.get(tool.exposed_name)
                 if existing is not None and existing.server_id != tool.server_id:
@@ -299,6 +302,17 @@ class McpManager:
         if not self._runtimes:
             return
         await self.describe_tools(self._runtimes.keys())
+
+    async def health(self) -> dict[str, dict[str, Any]]:
+        """Return per-server health status with tool counts or error details."""
+        status: dict[str, dict[str, Any]] = {}
+        for server_id, runtime in self._runtimes.items():
+            try:
+                tools = await runtime.list_tools()
+                status[server_id] = {"status": "ok", "tool_count": len(tools)}
+            except Exception as exc:
+                status[server_id] = {"status": "error", "error": str(exc)}
+        return status
 
     async def aclose(self) -> None:
         for runtime in self._runtimes.values():

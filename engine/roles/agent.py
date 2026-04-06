@@ -61,31 +61,35 @@ class AgentPlanner:
 
         executor = self._executors[name]
         task = arguments.get("task", "")
+        input_json = arguments.get("input_json")
+
         logger.info(f"AgentPlanner[{self.config.id}] delegating to subagent '{name}': {task[:100]}")
 
         with observe(
             name=f"subagent-run:{name}",
             as_type="span",
-            input={"task": task, "subagent_id": name},
+            input={"task": task, "subagent_id": name, "input_json": input_json},
             metadata={"component": "agent", "agent_id": self.config.id, "subagent_id": name},
         ) as subagent_span:
-            result = await executor.execute(task)
+            result = await executor.execute(task, input_json=input_json)
             if subagent_span is not None:
                 subagent_span.update(output=result)
             return result
 
-    async def plan_and_execute(self, task: str) -> str:
+    async def plan_and_execute(self, task: str, input_json: Any | None = None) -> str:
         logger.info(f"AgentPlanner[{self.config.id}] starting task: {task[:100]}")
+
+        system_prompt = self.config.system_prompt
 
         with observe(
             name=f"agent-plan:{self.config.id}",
             as_type="span",
-            input={"task": task, "agent_id": self.config.id},
+            input={"task": task, "agent_id": self.config.id, "input_json": input_json},
             metadata={"component": "agent", "agent_id": self.config.id},
         ) as agent_span:
             loop = StructuredReActLoop(
                 client=self.client,
-                system_prompt=self.config.system_prompt,
+                system_prompt=system_prompt,
                 action_handler=self._handle_action,
                 available_actions=self._build_available_actions_description(),
                 max_steps=self.config.max_steps,
@@ -93,7 +97,7 @@ class AgentPlanner:
                 required_pipeline=self.config.required_pipeline,
             )
 
-            result = await loop.run(task)
+            result = await loop.run(task, input_json=input_json)
             if agent_span is not None:
                 agent_span.update(output=result)
             return result

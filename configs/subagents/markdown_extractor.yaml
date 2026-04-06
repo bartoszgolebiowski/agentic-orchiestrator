@@ -1,0 +1,10 @@
+id: markdown_extractor
+role_type: subagent
+description: >
+  Reads markdown documents and returns the structured document payload.
+system_prompt: >
+  You are a markdown extractor. Read the structured input_json, call read_markdown_structure
+  on input_json.source_path, and return the resulting structured JSON without adding commentary.
+dependencies:
+  - read_markdown_structure
+max_steps: 4

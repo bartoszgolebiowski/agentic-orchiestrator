@@ -8,6 +8,7 @@ This directory contains the YAML files that define the runtime structure of the 
 - `configs/agents/*.yaml` defines agents.
 - `configs/subagents/*.yaml` defines subagents.
 - `configs/tools/*.yaml` defines local Python tools.
+- `engine/contracts/*.py` defines explicit Pydantic models used by workflow code.
 - `configs/mcps/*.yaml` defines MCP servers whose tools can be injected into subagents.
 
 ## Dependency Flow
@@ -127,3 +128,16 @@ exclude_tools:
 2. Make sure the ID is unique.
 3. Reference only valid dependencies.
 4. Run the test suite before relying on the new config.
+
+### Document Workflow Template
+
+The document example is expressed as task-specific roles that compose generic tools, explicit Pydantic models, and the Trello MCP server. Keep workflow specifics in agent/subagent prompts and the model definitions under `engine/contracts/`.
+
+Use the following files as the primary reference:
+
+- `configs/document_workflow.yaml` for local document workflow settings.
+- `configs/agents/document_agent.yaml` for the document agent.
+- `configs/subagents/*.yaml` for the document subagents.
+- `configs/tools/*.yaml` for generic local tool contracts.
+- `engine/contracts/*.py` for explicit workflow models.
+- `configs/mcps/trello.yaml` for the Trello MCP server.

@@ -6,9 +6,12 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from openai import AsyncOpenAI
+from pydantic import BaseModel
 
+from engine.core.contracts import normalize_handoff_payload, validate_model_payload
 from engine.core.llm import chat_completion, structured_completion
 from engine.core.models import AgentReActStep
+from engine.core.pipeline import PipelineState
 
 logger = logging.getLogger(__name__)
 
@@ -45,18 +48,28 @@ class ReActLoop:
     action_handler: ActionHandler
     max_steps: int = 10
     model: str | None = None
+    final_response_model: type[BaseModel] | None = None
 
     _messages: list[dict[str, Any]] = field(default_factory=list, init=False)
     _steps: list[StepResult] = field(default_factory=list, init=False)
 
-    def _init_messages(self, task: str) -> None:
+    def _init_messages(self, task: str, input_json: Any | None = None) -> None:
+        if input_json is None:
+            user_content = task
+        else:
+            user_content = json.dumps(
+                {"task": task, "input_json": input_json},
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
         self._messages = [
             {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": task},
+            {"role": "user", "content": user_content},
         ]
 
-    async def run(self, task: str) -> str:
-        self._init_messages(task)
+    async def run(self, task: str, input_json: Any | None = None) -> str:
+        self._init_messages(task, input_json=input_json)
         self._steps = []
 
         for step_num in range(1, self.max_steps + 1):
@@ -105,6 +118,59 @@ class ReActLoop:
             else:
                 final_answer = response.content or ""
                 logger.info(f"  Final answer: {final_answer[:200]}")
+                self._messages.append(response.model_dump())
+
+                if self.final_response_model is not None:
+                    try:
+                        validated = validate_model_payload(self.final_response_model, final_answer)
+                        normalized = json.dumps(
+                            validated.model_dump(mode="json"),
+                            ensure_ascii=False,
+                            indent=2,
+                            sort_keys=True,
+                        )
+                        self._steps.append(StepResult(
+                            thought=final_answer,
+                            action=None,
+                            observation=None,
+                            is_final=True,
+                            final_answer=normalized,
+                        ))
+                        return normalized
+                    except Exception:
+                        self._messages.append({
+                            "role": "user",
+                            "content": (
+                                "The previous response must be valid JSON matching the final output contract. "
+                                "Return only valid JSON now."
+                            ),
+                        })
+                        final_output = await structured_completion(
+                            client=self.client,
+                            messages=self._messages,
+                            response_model=self.final_response_model,
+                            model=self.model,
+                            trace_name=f"subagent-final:{self.final_response_model.__name__}",
+                            trace_metadata={
+                                "loop": "react",
+                                "final_output": self.final_response_model.__name__,
+                            },
+                        )
+                        normalized = json.dumps(
+                            final_output.model_dump(mode="json"),
+                            ensure_ascii=False,
+                            indent=2,
+                            sort_keys=True,
+                        )
+                        self._steps.append(StepResult(
+                            thought=final_answer,
+                            action=None,
+                            observation=None,
+                            is_final=True,
+                            final_answer=normalized,
+                        ))
+                        return normalized
+
                 self._steps.append(StepResult(
                     thought=final_answer,
                     action=None,
@@ -131,12 +197,14 @@ class StructuredReActLoop:
     model: str | None = None
     allow_thought_as_final: bool = True
     required_pipeline: list[str] = field(default_factory=list)
+    final_response_model: type[BaseModel] | None = None
 
     _messages: list[dict[str, Any]] = field(default_factory=list, init=False)
     _steps: list[StepResult] = field(default_factory=list, init=False)
-    _completed_subagents: list[str] = field(default_factory=list, init=False)
+    _pipeline: PipelineState = field(init=False, default_factory=lambda: PipelineState([]))
+    _handoff_payload: Any | None = field(default=None, init=False)
 
-    def _init_messages(self, task: str) -> None:
+    def _init_messages(self, task: str, input_json: Any | None = None) -> None:
         pipeline_instruction = ""
         if self.required_pipeline:
             stages = ", ".join(f"'{s}'" for s in self.required_pipeline)
@@ -151,16 +219,26 @@ class StructuredReActLoop:
             f"Available subagents you can delegate to:\n{self.available_actions}\n\n"
             f"Respond as structured JSON with exactly these fields:\n"
             f"- thought: string\n"
-            f"- action: null or an object with exactly {{\"subagent_id\": string, \"task\": string}}\n"
+            f"- action: null or an object with at least {{\"subagent_id\": string, \"task\": string}} and optional \"input_json\": object\n"
             f"- final_answer: null or string\n\n"
+            f"If you delegate to a subagent with an input contract, include input_json that matches that contract.\n"
             f"Use action as an object, not as a JSON string. Use the exact field name subagent_id.\n"
             f"Important: emit exactly one action per response at most. Do not batch multiple actions, "
             f"multiple subagents, or multiple stages in one turn. If more work is needed, wait for the next turn."
             f"{pipeline_instruction}"
         )
+        if input_json is None:
+            user_content = task
+        else:
+            user_content = json.dumps(
+                {"task": task, "input_json": input_json},
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
         self._messages = [
             {"role": "system", "content": enhanced_prompt},
-            {"role": "user", "content": task},
+            {"role": "user", "content": user_content},
         ]
 
     def _strengthen_single_action_instruction(self) -> None:
@@ -170,10 +248,11 @@ class StructuredReActLoop:
             "or stages in a single response."
         )
 
-    async def run(self, task: str) -> str:
-        self._init_messages(task)
+    async def run(self, task: str, input_json: Any | None = None) -> str:
+        self._init_messages(task, input_json=input_json)
         self._steps = []
-        self._completed_subagents = []
+        self._handoff_payload = input_json
+        self._pipeline = PipelineState(list(self.required_pipeline))
 
         for step_num in range(1, self.max_steps + 1):
             logger.info(f"StructuredReAct step {step_num}/{self.max_steps}")
@@ -226,10 +305,10 @@ class StructuredReActLoop:
 
             if final_answer is not None:
                 # Pipeline enforcement: reject premature final_answer
-                if self.required_pipeline:
-                    missing = [s for s in self.required_pipeline if s not in self._completed_subagents]
-                    if missing:
-                        next_stage = missing[0]
+                if not self._pipeline.is_empty and not self._pipeline.is_complete:
+                    missing = self._pipeline.missing_stages
+                    next_stage = self._pipeline.next_stage
+                    if missing and next_stage:
                         logger.warning(
                             f"  Pipeline enforcement: LLM tried to finish but {len(missing)} "
                             f"required stages remain: {missing}. Forcing delegation to '{next_stage}'."
@@ -255,6 +334,62 @@ class StructuredReActLoop:
                         continue
 
                 logger.info(f"  Final answer: {final_answer[:200]}")
+                self._messages.append({
+                    "role": "assistant",
+                    "content": f"Thought: {step.thought}\nFinal answer: {final_answer}",
+                })
+
+                if self.final_response_model is not None:
+                    try:
+                        validated = validate_model_payload(self.final_response_model, final_answer)
+                        normalized = json.dumps(
+                            validated.model_dump(mode="json"),
+                            ensure_ascii=False,
+                            indent=2,
+                            sort_keys=True,
+                        )
+                        self._steps.append(StepResult(
+                            thought=step.thought,
+                            action=None,
+                            observation=None,
+                            is_final=True,
+                            final_answer=normalized,
+                        ))
+                        return normalized
+                    except Exception:
+                        self._messages.append({
+                            "role": "user",
+                            "content": (
+                                "The previous response must be valid JSON matching the final output contract. "
+                                "Return only valid JSON now."
+                            ),
+                        })
+                        final_output = await structured_completion(
+                            client=self.client,
+                            messages=self._messages,
+                            response_model=self.final_response_model,
+                            model=self.model,
+                            trace_name=f"agent-final:{self.final_response_model.__name__}",
+                            trace_metadata={
+                                "loop": "instructor-react",
+                                "final_output": self.final_response_model.__name__,
+                            },
+                        )
+                        normalized = json.dumps(
+                            final_output.model_dump(mode="json"),
+                            ensure_ascii=False,
+                            indent=2,
+                            sort_keys=True,
+                        )
+                        self._steps.append(StepResult(
+                            thought=step.thought,
+                            action=None,
+                            observation=None,
+                            is_final=True,
+                            final_answer=normalized,
+                        ))
+                        return normalized
+
                 self._steps.append(StepResult(
                     thought=step.thought,
                     action=None,
@@ -267,6 +402,10 @@ class StructuredReActLoop:
             if step.action is not None:
                 action_name = step.action.subagent_id
                 action_args = {"task": step.action.task}
+                if step.action.input_json is not None:
+                    action_args["input_json"] = step.action.input_json
+                elif self._handoff_payload is not None:
+                    action_args["input_json"] = self._handoff_payload
 
                 logger.info(f"  Action: delegate to '{action_name}' with task: {step.action.task[:200]}")
 
@@ -277,24 +416,12 @@ class StructuredReActLoop:
                     logger.error(f"  Action failed: {observation}")
 
                 # Track completed subagent for pipeline enforcement.
-                # Only mark as completed when the observation doesn't indicate a failure.
-                _failure_prefixes = ("error:", "i'm unable", "i am unable", "i cannot", "could not", "failed to")
-                _obs_lower = observation.lower()
-                _is_failure = any(_obs_lower.startswith(p) for p in _failure_prefixes)
-                if action_name in self.required_pipeline and action_name not in self._completed_subagents:
-                    if not _is_failure:
-                        self._completed_subagents.append(action_name)
-                        remaining = [s for s in self.required_pipeline if s not in self._completed_subagents]
-                        logger.info(
-                            f"  Pipeline progress: completed '{action_name}'. "
-                            f"Remaining: {remaining if remaining else 'none (pipeline complete)'}"
-                        )
-                    else:
-                        logger.warning(
-                            f"  Pipeline stage '{action_name}' reported a failure; not marking as complete."
-                        )
+                self._pipeline.observe_result(action_name, observation)
 
                 logger.info(f"  Observation: {observation[:200]}")
+
+                if not observation.startswith("ERROR:"):
+                    self._handoff_payload = normalize_handoff_payload(observation)
 
                 self._messages.append({
                     "role": "assistant",

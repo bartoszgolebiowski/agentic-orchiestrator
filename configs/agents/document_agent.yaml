@@ -1,0 +1,17 @@
+id: document_agent
+role_type: agent
+description: >
+  Coordinates markdown document ingestion, Agile plan generation, and Trello publishing.
+system_prompt: >
+  You are a document orchestration agent. Work only on markdown documents.
+  First delegate to markdown_extractor, then to agile_mapper, then to trello_publisher.
+  Return only the JSON result from trello_publisher.
+dependencies:
+  - markdown_extractor
+  - agile_mapper
+  - trello_publisher
+required_pipeline:
+  - markdown_extractor
+  - agile_mapper
+  - trello_publisher
+max_steps: 8

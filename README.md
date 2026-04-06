@@ -40,3 +40,7 @@ Use the output for `LANGFUSE_ENCRYPTION_KEY` and `LANGFUSE_NEXTAUTH_SECRET`. Set
 ## Configuration Reference
 
 See [configs/README.md](configs/README.md) for a simple guide to defining agents, subagents, tools, and MCP servers.
+
+## Document Workflow
+
+The document workflow is defined through task-specific agent and subagent prompts that compose generic tools, explicit Pydantic models, and MCP tools. The current pipeline extracts markdown, builds an Agile plan, and then publishes that plan to Trello. Use [configs/README.md](configs/README.md) for wiring patterns, [configs/document_workflow.yaml](configs/document_workflow.yaml) for local settings, the model definitions under [engine/contracts](engine/contracts), and [configs/mcps/trello.yaml](configs/mcps/trello.yaml) for the Trello server configuration.

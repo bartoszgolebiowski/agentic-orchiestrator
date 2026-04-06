@@ -35,11 +35,32 @@ CONFIGS_DIR = Path(__file__).parent.parent / "configs"
 class TestYAMLLoading:
     def test_load_engine_config_succeeds(self):
         config = load_engine_config(CONFIGS_DIR)
-        assert set(config.agents) == {"math_agent"}
-        assert set(config.subagents) == {"calculator_subagent"}
-        assert set(config.tools) == {"add", "multiply", "subtract"}
-        assert config.mcps == {}
+        assert set(config.agents) == {"math_agent", "document_agent"}
+        assert set(config.subagents) == {
+            "calculator_subagent",
+            "markdown_extractor",
+            "agile_mapper",
+            "trello_publisher",
+        }
+        assert set(config.tools) == {
+            "add",
+            "multiply",
+            "subtract",
+            "read_markdown_structure",
+        }
+        assert set(config.mcps) == {"trello"}
         assert config.agents["math_agent"].dependencies == ["calculator_subagent"]
+        assert config.agents["document_agent"].dependencies == ["markdown_extractor", "agile_mapper", "trello_publisher"]
+        assert config.agents["document_agent"].required_pipeline == ["markdown_extractor", "agile_mapper", "trello_publisher"]
+        assert config.subagents["agile_mapper"].dependencies == []
+        assert not hasattr(config.agents["document_agent"], "output_model")
+        assert not hasattr(config.subagents["markdown_extractor"], "input_model")
+        assert not hasattr(config.subagents["markdown_extractor"], "output_model")
+        assert not hasattr(config.subagents["agile_mapper"], "input_model")
+        assert not hasattr(config.subagents["agile_mapper"], "output_model")
+        assert not hasattr(config.subagents["trello_publisher"], "input_model")
+        assert not hasattr(config.subagents["trello_publisher"], "output_model")
+        assert config.subagents["trello_publisher"].mcp_dependencies == ["trello"]
 
     def test_agents_reference_valid_subagents(self):
         config = load_engine_config(CONFIGS_DIR)
@@ -57,91 +78,90 @@ class TestYAMLLoading:
                     f"Subagent '{sub_id}' references missing tool '{dep}'"
                 )
 
-        def test_load_engine_config_with_mcp_servers(self, tmp_path):
-                (tmp_path / "tools").mkdir()
-                (tmp_path / "subagents").mkdir()
-                (tmp_path / "mcps").mkdir()
+    def test_node_configs_do_not_expose_model_contract_fields(self):
+        config = load_engine_config(CONFIGS_DIR)
+        assert "output_model" not in config.agents["document_agent"].model_dump()
+        assert "input_model" not in config.subagents["markdown_extractor"].model_dump()
+        assert "output_model" not in config.subagents["markdown_extractor"].model_dump()
+        assert "input_model" not in config.subagents["agile_mapper"].model_dump()
+        assert "output_model" not in config.subagents["agile_mapper"].model_dump()
+        assert "input_model" not in config.subagents["trello_publisher"].model_dump()
+        assert "output_model" not in config.subagents["trello_publisher"].model_dump()
 
-                (tmp_path / "tools" / "add.yaml").write_text(
-                        """
-id: add
-description: Adds two numbers.
-parameters:
-    a:
-        type: number
-        description: First addend.
-        required: true
-    b:
-        type: number
-        description: Second addend.
-        required: true
-""".strip()
-                )
+    def test_load_engine_config_with_mcp_servers(self, tmp_path):
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "subagents").mkdir()
+        (tmp_path / "mcps").mkdir()
 
-                (tmp_path / "subagents" / "calc.yaml").write_text(
-                        """
+        (tmp_path / "tools" / "helper.yaml").write_text(
+            """
+id: helper
+description: helper tool
+parameters: {}
+""".strip(),
+            encoding="utf-8",
+        )
+
+        (tmp_path / "subagents" / "calc.yaml").write_text(
+            """
 id: calc
 role_type: subagent
 description: test subagent
 system_prompt: test prompt
 dependencies:
-    - add
+    - helper
 mcp_dependencies:
     - remote_server
-""".strip()
-                )
+""".strip(),
+            encoding="utf-8",
+        )
 
-                (tmp_path / "mcps" / "remote_server.yaml").write_text(
-                        """
+        (tmp_path / "mcps" / "remote_server.yaml").write_text(
+            """
 id: remote_server
 description: remote tool server
 connection:
     transport: http
     url: https://example.com/mcp
-""".strip()
-                )
+""".strip(),
+            encoding="utf-8",
+        )
 
-                config = load_engine_config(tmp_path)
+        config = load_engine_config(tmp_path)
 
-                assert set(config.mcps) == {"remote_server"}
-                assert config.subagents["calc"].mcp_dependencies == ["remote_server"]
-                assert config.mcps["remote_server"].connection.url == "https://example.com/mcp"
+        assert set(config.mcps) == {"remote_server"}
+        assert config.subagents["calc"].mcp_dependencies == ["remote_server"]
+        assert config.mcps["remote_server"].connection.url == "https://example.com/mcp"
 
-        def test_invalid_mcp_reference_raises(self, tmp_path):
-                (tmp_path / "tools").mkdir()
-                (tmp_path / "subagents").mkdir()
+    def test_invalid_mcp_reference_raises(self, tmp_path):
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "subagents").mkdir()
 
-                (tmp_path / "tools" / "add.yaml").write_text(
-                        """
-id: add
-description: Adds two numbers.
-parameters:
-    a:
-        type: number
-        description: First addend.
-        required: true
-    b:
-        type: number
-        description: Second addend.
-        required: true
-""".strip()
-                )
+        (tmp_path / "tools" / "helper.yaml").write_text(
+            """
+id: helper
+description: helper tool
+parameters: {}
+""".strip(),
+            encoding="utf-8",
+        )
 
-                (tmp_path / "subagents" / "calc.yaml").write_text(
-                        """
+        (tmp_path / "subagents" / "calc.yaml").write_text(
+            """
 id: calc
 role_type: subagent
 description: test subagent
 system_prompt: test prompt
 dependencies:
-    - add
+    - helper
 mcp_dependencies:
     - missing_server
-""".strip()
-                )
+""".strip(),
+            encoding="utf-8",
+        )
 
-                with pytest.raises(ValueError, match="unknown MCP server"):
-                        load_engine_config(tmp_path)
+        with pytest.raises(ValueError, match="unknown MCP server"):
+            load_engine_config(tmp_path)
 
     def test_invalid_yaml_missing_role_type(self, tmp_path):
         agents_dir = tmp_path / "agents"
@@ -325,7 +345,25 @@ class TestTracingIntegration:
 
         message = await llm.chat_completion(
             client=mock_client,
-            messages=[{"role": "user", "content": "hello"}],
+            messages=[
+                {"role": "system", "content": "system prompt"},
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "content": "thinking",
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "add",
+                                "arguments": '{"a": 1, "b": 2}',
+                            },
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call_1", "content": "3"},
+            ],
             model="gpt-test",
             trace_name="test-generation",
             trace_metadata={"run_id": "abc123"},
@@ -333,6 +371,15 @@ class TestTracingIntegration:
 
         assert message.model_dump() == {"role": "assistant", "content": "hi"}
         assert calls["observe"]["name"] == "test-generation"
+        assert isinstance(calls["observe"]["input"], str)
+        assert "Trace kind: chat_completion" in calls["observe"]["input"]
+        assert "Message count: 4" in calls["observe"]["input"]
+        assert "SYSTEM" in calls["observe"]["input"]
+        assert "USER" in calls["observe"]["input"]
+        assert "hello" in calls["observe"]["input"]
+        assert "Tool calls:" in calls["observe"]["input"]
+        assert "add({\"a\": 1, \"b\": 2})" in calls["observe"]["input"]
+        assert "Tool call id: call_1" in calls["observe"]["input"]
         assert calls["observe"]["metadata"] == {"run_id": "abc123"}
         assert calls["updates"][0]["usage_details"] == {"input_tokens": 3, "output_tokens": 4}
 
@@ -369,7 +416,11 @@ class TestTracingIntegration:
             def __init__(self):
                 self.responses = MagicMock(parse=DummyCompletions().parse)
 
-        monkeypatch.setattr(llm, "observe", lambda **kwargs: DummyObservation())
+        def fake_observe(**kwargs):
+            captured["observe"] = kwargs
+            return DummyObservation()
+
+        monkeypatch.setattr(llm, "observe", fake_observe)
 
         result = await llm.structured_completion(
             client=DummyClient(),
@@ -378,6 +429,10 @@ class TestTracingIntegration:
             model="gpt-test",
         )
 
+        assert isinstance(captured["observe"]["input"], str)
+        assert "Trace kind: structured_completion" in captured["observe"]["input"]
+        assert "Response model: DummyResponseModel" in captured["observe"]["input"]
+        assert "hello" in captured["observe"]["input"]
         assert captured["text_format"] is DummyResponseModel
         assert captured["model"] == "gpt-test"
         assert result.value == "ok"
@@ -426,7 +481,11 @@ class TestTracingIntegration:
                     create=DummyCompletions().create,
                 )
 
-        monkeypatch.setattr(llm, "observe", lambda **kwargs: DummyObservation())
+        def fake_observe(**kwargs):
+            captured["observe"] = kwargs
+            return DummyObservation()
+
+        monkeypatch.setattr(llm, "observe", fake_observe)
         monkeypatch.setattr(llm, "BadRequestError", DummyBadRequestError)
 
         result = await llm.structured_completion(
@@ -436,6 +495,9 @@ class TestTracingIntegration:
             model="gpt-test",
         )
 
+        assert isinstance(captured["observe"]["input"], str)
+        assert "Trace kind: structured_completion" in captured["observe"]["input"]
+        assert "Response model: DummyResponseModel" in captured["observe"]["input"]
         assert captured["text"] == {"format": {"type": "json_object"}}
         assert result.value == "ok"
 
@@ -447,6 +509,13 @@ class TestTracingIntegration:
 
         assert decision.agent_id == "math_agent"
         assert decision.task == "Compute 2 + 2"
+
+    def test_routing_decision_accepts_structured_input_json(self):
+        decision = RoutingDecision.model_validate_json(
+            '{"target_agent": "document_agent", "task": "Process document", "input_json": {"source_path": "docs/example.md"}}'
+        )
+
+        assert decision.input_json == {"source_path": "docs/example.md"}
 
 
 # ─── Pydantic Response Models ───
@@ -461,6 +530,15 @@ class TestResponseModels:
     def test_delegation_action_valid(self):
         a = DelegationAction(subagent_id="calculator_subagent", task="add 2 and 3")
         assert a.subagent_id == "calculator_subagent"
+
+    def test_delegation_action_coerces_stringified_input_json(self):
+        a = DelegationAction(
+            subagent_id="markdown_extractor",
+            task="extract markdown",
+            input_json='{"source_path": "docs/example.md"}',
+        )
+
+        assert a.input_json == {"source_path": "docs/example.md"}
 
     def test_agent_react_step_with_action(self):
         step = AgentReActStep(

@@ -1,0 +1,12 @@
+id: trello
+description: Trello MCP server for publishing generated document plans.
+connection:
+  transport: stdio
+  command: npx
+  args:
+    - "@delorenj/mcp-server-trello"
+  cwd: ${TRELLO_MCP_CWD}
+  env:
+    TRELLO_API_KEY: ${TRELLO_API_KEY}
+    TRELLO_TOKEN: ${TRELLO_TOKEN}
+tool_prefix: trello

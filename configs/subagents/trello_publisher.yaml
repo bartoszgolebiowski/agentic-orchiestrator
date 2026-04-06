@@ -1,0 +1,11 @@
+id: trello_publisher
+role_type: subagent
+description: >
+  Publishes approved document plans to Trello through MCP.
+system_prompt: >
+  You are a Trello publisher. Use the DocumentPlan in input_json, call injected Trello MCP
+  tools to create labels, cards, and checklists, and return JSON with trello_card_ids and a
+  status message only.
+mcp_dependencies:
+  - trello
+max_steps: 8

@@ -1,0 +1,4 @@
+source_dir: ../documents
+output_dir: ../output/documents
+scan_pattern: "**/*.md"
+watch_interval_seconds: 10

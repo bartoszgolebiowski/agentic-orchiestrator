@@ -1,0 +1,15 @@
+id: read_markdown_structure
+description: Reads markdown and returns structured JSON sections and bullets.
+parameters:
+  source_path:
+    type: string
+    description: Path to the markdown file.
+    required: true
+  include_raw:
+    type: boolean
+    description: Include raw markdown text in output.
+    required: false
+  include_outline:
+    type: boolean
+    description: Include generated outline text in output.
+    required: false
