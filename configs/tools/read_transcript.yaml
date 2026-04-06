@@ -1,7 +1,0 @@
-id: read_transcript
-description: "Reads a transcript file from the given path and returns its full text content."
-parameters:
-  path:
-    type: string
-    description: "Absolute or relative path to the transcript file."
-    required: true

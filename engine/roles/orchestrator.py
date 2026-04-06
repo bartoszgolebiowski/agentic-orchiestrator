@@ -9,6 +9,7 @@ from pydantic import Field, create_model
 from engine.core.llm import structured_completion
 from engine.core.models import EngineConfig, RoutingDecision
 from engine.core.tracing import observe
+from engine.mcp.runtime import McpManager
 from engine.roles.agent import AgentPlanner
 
 logger = logging.getLogger(__name__)
@@ -19,10 +20,12 @@ class Orchestrator:
         self,
         engine_config: EngineConfig,
         client: AsyncOpenAI,
+        mcp_manager: McpManager | None = None,
         model: str | None = None,
     ) -> None:
         self.engine_config = engine_config
         self.client = client
+        self.mcp_manager = mcp_manager
         self.model = model
 
         self._agent_planners: dict[str, AgentPlanner] = {}
@@ -31,6 +34,7 @@ class Orchestrator:
                 config=agent_config,
                 engine_config=engine_config,
                 client=client,
+                mcp_manager=mcp_manager,
                 model=model,
             )
 

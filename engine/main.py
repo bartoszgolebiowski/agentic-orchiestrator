@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import argparse
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,6 +14,7 @@ import engine.tools  # noqa: F401 — trigger tool registration
 from engine.core.llm import get_raw_client
 from engine.core.loader import load_engine_config
 from engine.core.tracing import observe, flush, log_langfuse_connection_status
+from engine.mcp.runtime import McpManager
 from engine.roles.orchestrator import Orchestrator
 
 
@@ -34,17 +35,24 @@ async def main(query: str, config_dir: str = "configs") -> str:
     logger.info(
         f"Loaded {len(engine_config.agents)} agents, "
         f"{len(engine_config.subagents)} subagents, "
-        f"{len(engine_config.tools)} tools"
+        f"{len(engine_config.tools)} tools, "
+        f"{len(engine_config.mcps)} MCP servers"
     )
 
     client = get_raw_client()
-    orchestrator = Orchestrator(
-        engine_config=engine_config,
-        client=client,
-    )
+    mcp_manager = McpManager(engine_config.mcps)
 
-    run_id = uuid4().hex
     try:
+        if engine_config.mcps:
+            await mcp_manager.warmup()
+
+        orchestrator = Orchestrator(
+            engine_config=engine_config,
+            client=client,
+            mcp_manager=mcp_manager,
+        )
+
+        run_id = uuid4().hex
         with observe(
             name="agent-request",
             as_type="span",
@@ -56,57 +64,22 @@ async def main(query: str, config_dir: str = "configs") -> str:
                 root_span.update(output=result)
             return result
     finally:
+        await mcp_manager.aclose()
         flush()
 
 
-async def analyze_transcript(
-    transcript_path: str,
-    config_dir: str = "configs",
-    output_base: str = "output",
-) -> str:
-    """Convenience entry point for transcript analysis with auto-generated output dir."""
-    load_dotenv()
-    log_langfuse_connection_status()
-
-    transcript_file = Path(transcript_path)
-    if not transcript_file.exists():
-        return f"Error: Transcript file not found: {transcript_path}"
-
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = Path(output_base) / timestamp
-    output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "action-points").mkdir(exist_ok=True)
-
-    query = (
-        f"Analyze the transcript at '{transcript_file}'. "
-        f"Write all output files to '{output_dir}'. "
-        f"The output directory for action points is '{output_dir}/action-points/'."
-    )
-
-    logger.info(f"Starting transcript analysis: {transcript_path} -> {output_dir}")
-
-    return await main(query, config_dir)
-
-
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage:")
-        print("  python -m engine.main <query> [config_dir]")
-        print("  python -m engine.main --transcript <file> [config_dir] [output_dir]")
+    parser = argparse.ArgumentParser(description="Run the agentic orchestrator.")
+    parser.add_argument("query", nargs="?", help="User query to send to the orchestrator.")
+    parser.add_argument("config_dir", nargs="?", default="configs", help="Path to the config directory.")
+
+    args = parser.parse_args()
+
+    if not args.query:
+        parser.print_usage()
         sys.exit(1)
 
-    if sys.argv[1] == "--transcript":
-        if len(sys.argv) < 3:
-            print("Usage: python -m engine.main --transcript <file> [config_dir] [output_dir]")
-            sys.exit(1)
-        transcript_path = sys.argv[2]
-        config_dir = sys.argv[3] if len(sys.argv) > 3 else "configs"
-        output_base = sys.argv[4] if len(sys.argv) > 4 else "output"
-        result = asyncio.run(analyze_transcript(transcript_path, config_dir, output_base))
-    else:
-        query = sys.argv[1]
-        config_dir = sys.argv[2] if len(sys.argv) > 2 else "configs"
-        result = asyncio.run(main(query, config_dir))
+    result = asyncio.run(main(args.query, args.config_dir))
 
     print(f"\n{'='*60}")
     print(f"RESULT: {result}")

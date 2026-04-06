@@ -10,6 +10,7 @@ from engine.core.react import ReActLoop
 from engine.core.security import enforce_agent_boundary
 from engine.core.tracing import observe
 from engine.tools.registry import get_tool, build_openai_tool_spec
+from engine.mcp.runtime import McpManager, build_openai_mcp_tool_spec
 
 logger = logging.getLogger(__name__)
 
@@ -20,44 +21,129 @@ class SubagentExecutor:
         config: NodeConfig,
         engine_config: EngineConfig,
         client: AsyncOpenAI,
+        mcp_manager: McpManager | None = None,
         model: str | None = None,
     ) -> None:
         self.config = config
         self.engine_config = engine_config
         self.client = client
+        self.mcp_manager = mcp_manager
         self.model = model
 
-        self._tool_specs = self._build_tool_specs()
-
-    def _build_tool_specs(self) -> list[dict[str, Any]]:
+    def _build_local_tool_specs(self) -> tuple[list[dict[str, Any]], list[str], list[str]]:
         specs: list[dict[str, Any]] = []
+        descriptions: list[str] = []
+        allowed_ids: list[str] = []
+
         for tool_id in self.config.dependencies:
             defn = self.engine_config.tools[tool_id]
             specs.append(build_openai_tool_spec(tool_id, defn))
-        return specs
+            descriptions.append(f"- {tool_id}: {defn.description}")
+            allowed_ids.append(tool_id)
 
-    async def _handle_action(self, name: str, arguments: dict[str, Any]) -> str:
-        enforce_agent_boundary(
-            caller_role=RoleType.SUBAGENT,
-            callee_id=name,
-            allowed_ids=self.config.dependencies,
-        )
+        return specs, descriptions, allowed_ids
 
-        tool_fn = get_tool(name)
-        with observe(
-            name=f"tool:{name}",
-            as_type="span",
-            input={"arguments": arguments, "tool": name},
-            metadata={"component": "subagent", "subagent_id": self.config.id, "tool": name},
-        ) as tool_span:
-            result = await tool_fn(**arguments)
-            result_text = str(result)
-            if tool_span is not None:
-                tool_span.update(output=result_text)
-            return result_text
+    async def _build_mcp_tool_context(self) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+        if not self.config.mcp_dependencies:
+            return [], [], []
+
+        if self.mcp_manager is None:
+            raise ValueError(
+                f"Subagent '{self.config.id}' declares mcp_dependencies but no MCP manager was provided"
+            )
+
+        descriptors = await self.mcp_manager.describe_tools(self.config.mcp_dependencies)
+
+        specs: list[dict[str, Any]] = []
+        descriptions: list[str] = []
+        allowed_ids: list[str] = []
+
+        for descriptor in descriptors:
+            specs.append(build_openai_mcp_tool_spec(descriptor))
+            descriptions.append(
+                f"- {descriptor.exposed_name}: {descriptor.description} (MCP server: {descriptor.server_id})"
+            )
+            allowed_ids.append(descriptor.exposed_name)
+
+        return specs, descriptions, allowed_ids
+
+    def _build_available_actions_description(
+        self,
+        local_descriptions: list[str],
+        mcp_descriptions: list[str],
+    ) -> str:
+        sections: list[str] = []
+        if local_descriptions:
+            sections.append("Local tools:\n" + "\n".join(local_descriptions))
+        if mcp_descriptions:
+            sections.append("MCP tools:\n" + "\n".join(mcp_descriptions))
+        return "\n\n".join(sections)
 
     async def execute(self, task: str) -> str:
         logger.info(f"SubagentExecutor[{self.config.id}] starting task: {task[:100]}")
+
+        local_tool_specs, local_descriptions, local_allowed_ids = self._build_local_tool_specs()
+        mcp_tool_specs, mcp_descriptions, mcp_allowed_ids = await self._build_mcp_tool_context()
+
+        collisions = set(local_allowed_ids) & set(mcp_allowed_ids)
+        if collisions:
+            raise ValueError(
+                f"Subagent '{self.config.id}' has overlapping local and MCP tool names: {sorted(collisions)}"
+            )
+
+        available_actions = self._build_available_actions_description(local_descriptions, mcp_descriptions)
+        tool_specs = [*local_tool_specs, *mcp_tool_specs]
+        allowed_ids = [*local_allowed_ids, *mcp_allowed_ids]
+
+        async def handle_action(name: str, arguments: dict[str, Any]) -> str:
+            enforce_agent_boundary(
+                caller_role=RoleType.SUBAGENT,
+                callee_id=name,
+                allowed_ids=allowed_ids,
+            )
+
+            if name in self.engine_config.tools:
+                tool_fn = get_tool(name)
+                with observe(
+                    name=f"tool:{name}",
+                    as_type="span",
+                    input={"arguments": arguments, "tool": name},
+                    metadata={
+                        "component": "subagent",
+                        "subagent_id": self.config.id,
+                        "tool": name,
+                        "tool_source": "local",
+                    },
+                ) as tool_span:
+                    result = await tool_fn(**arguments)
+                    result_text = str(result)
+                    if tool_span is not None:
+                        tool_span.update(output=result_text)
+                    return result_text
+
+            if name in mcp_allowed_ids:
+                if self.mcp_manager is None:
+                    raise ValueError(
+                        f"Subagent '{self.config.id}' cannot call MCP tool '{name}' without an MCP manager"
+                    )
+
+                with observe(
+                    name=f"tool:{name}",
+                    as_type="span",
+                    input={"arguments": arguments, "tool": name},
+                    metadata={
+                        "component": "subagent",
+                        "subagent_id": self.config.id,
+                        "tool": name,
+                        "tool_source": "mcp",
+                    },
+                ) as tool_span:
+                    result_text = await self.mcp_manager.call_tool(name, arguments)
+                    if tool_span is not None:
+                        tool_span.update(output=result_text)
+                    return result_text
+
+            raise KeyError(f"Subagent '{self.config.id}' cannot resolve action '{name}'")
 
         with observe(
             name=f"subagent-plan:{self.config.id}",
@@ -68,8 +154,8 @@ class SubagentExecutor:
             loop = ReActLoop(
                 client=self.client,
                 system_prompt=self.config.system_prompt,
-                tools_spec=self._tool_specs,
-                action_handler=self._handle_action,
+                tools_spec=tool_specs,
+                action_handler=handle_action,
                 max_steps=self.config.max_steps,
                 model=self.config.model or self.model,
             )

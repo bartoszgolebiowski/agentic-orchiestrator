@@ -9,6 +9,7 @@ from engine.core.models import NodeConfig, RoleType, EngineConfig
 from engine.core.react import StructuredReActLoop
 from engine.core.security import enforce_agent_boundary, enforce_no_direct_tool_access
 from engine.core.tracing import observe
+from engine.mcp.runtime import McpManager
 from engine.roles.subagent import SubagentExecutor
 
 logger = logging.getLogger(__name__)
@@ -20,11 +21,13 @@ class AgentPlanner:
         config: NodeConfig,
         engine_config: EngineConfig,
         client: AsyncOpenAI,
+        mcp_manager: McpManager | None = None,
         model: str | None = None,
     ) -> None:
         self.config = config
         self.engine_config = engine_config
         self.client = client
+        self.mcp_manager = mcp_manager
         self.model = model
 
         self._executors: dict[str, SubagentExecutor] = {}
@@ -35,6 +38,7 @@ class AgentPlanner:
                 config=sub_config,
                 engine_config=engine_config,
                 client=client,
+                mcp_manager=mcp_manager,
                 model=sub_config.model or model,
             )
 
@@ -86,7 +90,6 @@ class AgentPlanner:
                 available_actions=self._build_available_actions_description(),
                 max_steps=self.config.max_steps,
                 model=self.config.model or self.model,
-                allow_thought_as_final=self.config.id != "transcript_analyst",
                 required_pipeline=self.config.required_pipeline,
             )
 

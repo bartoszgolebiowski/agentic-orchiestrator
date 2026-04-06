@@ -7,5 +7,3 @@ system_prompt: >
 
   Available agent types:
   - math_agent: Handles arithmetic and calculator-style tasks.
-  - transcript_analyst: Handles transcript analysis tasks — extracting facts,
-    deriving conclusions, and generating action points from text transcripts.

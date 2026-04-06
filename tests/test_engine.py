@@ -1,8 +1,7 @@
-import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -11,17 +10,11 @@ from engine.core.loader import load_engine_config
 import engine.core.llm as llm
 import engine.core.tracing as tracing
 from engine.core.models import (
-    ActionPoint,
     AgentReActStep,
-    ConclusionsSummary,
     DelegationAction,
-    EngineConfig,
-    Fact,
-    FactsSummary,
     NodeConfig,
     RoleType,
     RoutingDecision,
-    SourceReference,
 )
 from engine.core.security import (
     BoundaryViolationError,
@@ -42,23 +35,11 @@ CONFIGS_DIR = Path(__file__).parent.parent / "configs"
 class TestYAMLLoading:
     def test_load_engine_config_succeeds(self):
         config = load_engine_config(CONFIGS_DIR)
-        assert "math_agent" in config.agents
-        assert "transcript_analyst" in config.agents
-        assert "calculator_subagent" in config.subagents
-        assert "facts_extractor" in config.subagents
-        assert "conclusions_analyst" in config.subagents
-        assert "action_point_generator" in config.subagents
-        assert "add" in config.tools
-        assert "read_transcript" in config.tools
-        assert "write_markdown_file" in config.tools
-        assert "create_output_directory" in config.tools
-        assert "log_ticket_payload" in config.tools
-
-    def test_transcript_agent_prompt_enforces_single_action(self):
-        config = load_engine_config(CONFIGS_DIR)
-        prompt = config.agents["transcript_analyst"].system_prompt
-        assert "exactly one delegated subagent action" in prompt or "exactly one delegated subagent action" in prompt.lower()
-        assert "Do not batch multiple stages, multiple subagent actions, or multi-step plans in one response." in prompt
+        assert set(config.agents) == {"math_agent"}
+        assert set(config.subagents) == {"calculator_subagent"}
+        assert set(config.tools) == {"add", "multiply", "subtract"}
+        assert config.mcps == {}
+        assert config.agents["math_agent"].dependencies == ["calculator_subagent"]
 
     def test_agents_reference_valid_subagents(self):
         config = load_engine_config(CONFIGS_DIR)
@@ -75,6 +56,92 @@ class TestYAMLLoading:
                 assert dep in config.tools, (
                     f"Subagent '{sub_id}' references missing tool '{dep}'"
                 )
+
+        def test_load_engine_config_with_mcp_servers(self, tmp_path):
+                (tmp_path / "tools").mkdir()
+                (tmp_path / "subagents").mkdir()
+                (tmp_path / "mcps").mkdir()
+
+                (tmp_path / "tools" / "add.yaml").write_text(
+                        """
+id: add
+description: Adds two numbers.
+parameters:
+    a:
+        type: number
+        description: First addend.
+        required: true
+    b:
+        type: number
+        description: Second addend.
+        required: true
+""".strip()
+                )
+
+                (tmp_path / "subagents" / "calc.yaml").write_text(
+                        """
+id: calc
+role_type: subagent
+description: test subagent
+system_prompt: test prompt
+dependencies:
+    - add
+mcp_dependencies:
+    - remote_server
+""".strip()
+                )
+
+                (tmp_path / "mcps" / "remote_server.yaml").write_text(
+                        """
+id: remote_server
+description: remote tool server
+connection:
+    transport: http
+    url: https://example.com/mcp
+""".strip()
+                )
+
+                config = load_engine_config(tmp_path)
+
+                assert set(config.mcps) == {"remote_server"}
+                assert config.subagents["calc"].mcp_dependencies == ["remote_server"]
+                assert config.mcps["remote_server"].connection.url == "https://example.com/mcp"
+
+        def test_invalid_mcp_reference_raises(self, tmp_path):
+                (tmp_path / "tools").mkdir()
+                (tmp_path / "subagents").mkdir()
+
+                (tmp_path / "tools" / "add.yaml").write_text(
+                        """
+id: add
+description: Adds two numbers.
+parameters:
+    a:
+        type: number
+        description: First addend.
+        required: true
+    b:
+        type: number
+        description: Second addend.
+        required: true
+""".strip()
+                )
+
+                (tmp_path / "subagents" / "calc.yaml").write_text(
+                        """
+id: calc
+role_type: subagent
+description: test subagent
+system_prompt: test prompt
+dependencies:
+    - add
+mcp_dependencies:
+    - missing_server
+""".strip()
+                )
+
+                with pytest.raises(ValueError, match="unknown MCP server"):
+                        load_engine_config(tmp_path)
 
     def test_invalid_yaml_missing_role_type(self, tmp_path):
         agents_dir = tmp_path / "agents"
@@ -375,11 +442,11 @@ class TestTracingIntegration:
     @pytest.mark.asyncio
     async def test_routing_decision_accepts_target_agent_alias(self):
         decision = RoutingDecision.model_validate_json(
-            '{"target_agent": "transcript_analyst", "task": "Analyze the transcript"}'
+            '{"target_agent": "math_agent", "task": "Compute 2 + 2"}'
         )
 
-        assert decision.agent_id == "transcript_analyst"
-        assert decision.task == "Analyze the transcript"
+        assert decision.agent_id == "math_agent"
+        assert decision.task == "Compute 2 + 2"
 
 
 # ─── Pydantic Response Models ───
@@ -510,65 +577,6 @@ class TestReActLoop:
             await loop.run("loop forever")
 
 
-# ─── Transcript Tools ───
-
-
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
-
-
-class TestTranscriptTools:
-    def test_transcript_tools_registered(self):
-        registered = list_registered_tools()
-        assert "read_transcript" in registered
-        assert "write_markdown_file" in registered
-        assert "create_output_directory" in registered
-        assert "log_ticket_payload" in registered
-
-    @pytest.mark.asyncio
-    async def test_read_transcript_tool(self):
-        fn = get_tool("read_transcript")
-        result = await fn(path=str(FIXTURES_DIR / "sample_transcript.txt"))
-        assert "Sprint Retrospective" in result
-        assert "Bob" in result
-
-    @pytest.mark.asyncio
-    async def test_read_transcript_missing_file(self):
-        fn = get_tool("read_transcript")
-        result = await fn(path="/nonexistent/file.txt")
-        assert "ERROR" in result
-
-    @pytest.mark.asyncio
-    async def test_write_markdown_file_tool(self, tmp_path):
-        fn = get_tool("write_markdown_file")
-        out_file = tmp_path / "test_output.md"
-        result = await fn(path=str(out_file), content="# Test\nHello")
-        assert "File written" in result
-        assert out_file.read_text() == "# Test\nHello"
-
-    @pytest.mark.asyncio
-    async def test_create_output_directory_tool(self, tmp_path):
-        fn = get_tool("create_output_directory")
-        result = await fn(base_dir=str(tmp_path), transcript_id="2026-03-28_14-00-00")
-        assert "2026-03-28_14-00-00" in result
-        assert (tmp_path / "2026-03-28_14-00-00" / "action-points").is_dir()
-
-    @pytest.mark.asyncio
-    async def test_log_ticket_payload_tool(self):
-        fn = get_tool("log_ticket_payload")
-        result = await fn(
-            title="Fix flaky tests",
-            description="Dedicate a sprint to test infra",
-            acceptance_criteria='["CI time < 15min", "No flaky tests"]',
-            definition_of_done='["All tests green", "Dockerized"]',
-            priority="high",
-            category="engineering",
-            risk="CI blocked",
-            dependencies='[]',
-            estimate_effort="L",
-        )
-        assert "Ticket logged" in result
-
-
 # ─── Per-Role Model Selection ───
 
 
@@ -593,72 +601,6 @@ class TestPerRoleModel:
             dependencies=["add"],
         )
         assert nc.model is None
-
-    def test_transcript_analyst_yaml_loads_model_field(self):
-        config = load_engine_config(CONFIGS_DIR)
-        for agent_id, agent in config.agents.items():
-            assert hasattr(agent, "model")
-
-
-# ─── Transcript Analysis Models ───
-
-
-class TestTranscriptModels:
-    def test_fact_model(self):
-        f = Fact(
-            statement="API v2 migration completed ahead of schedule",
-            source=SourceReference(
-                quote="we completed the API v2 migration ahead of schedule",
-                context="Bob discussing sprint achievements",
-            ),
-        )
-        assert f.statement
-        assert f.source.quote
-
-    def test_facts_summary(self):
-        fs = FactsSummary(facts=[
-            Fact(
-                statement="47 story points delivered",
-                source=SourceReference(quote="The team delivered 47 story points"),
-            ),
-        ])
-        assert len(fs.facts) == 1
-
-    def test_action_point_model(self):
-        ap = ActionPoint(
-            title="Build staging environment",
-            description="Invest 2 sprints into building a proper staging env",
-            acceptance_criteria=["Mirrors production data", "Auto-deploys on merge"],
-            definition_of_done=["Staging env running", "Tested with prod-scale data"],
-            priority="high",
-            category="infrastructure",
-            risk="Repeated unplanned downtime",
-            dependencies=["Budget approval"],
-            estimate_effort="XL",
-            source_quotes=[
-                SourceReference(
-                    quote="I propose we invest 2 sprints into building a proper staging environment",
-                    context="Bob's proposal",
-                ),
-            ],
-        )
-        assert ap.title == "Build staging environment"
-        assert len(ap.acceptance_criteria) == 2
-        assert len(ap.source_quotes) == 1
-
-    def test_action_point_serialization(self):
-        ap = ActionPoint(
-            title="Test",
-            description="Test desc",
-            acceptance_criteria=["AC1"],
-            definition_of_done=["DoD1"],
-            priority="medium",
-            category="test",
-            source_quotes=[SourceReference(quote="some quote")],
-        )
-        data = ap.model_dump()
-        assert data["title"] == "Test"
-        assert data["source_quotes"][0]["quote"] == "some quote"
 
 
 class TestInstructorReActLoop:
@@ -835,12 +777,12 @@ class TestInstructorReActLoop:
     def test_agent_react_step_coerces_stringified_action(self):
         step = AgentReActStep(
             thought="delegate",
-            action='{"subagent": "facts_extractor", "task": "Read transcript"}',
+            action='{"subagent": "calculator_subagent", "task": "add 2 and 3"}',
             final_answer=None,
         )
         assert isinstance(step.action, DelegationAction)
-        assert step.action.subagent_id == "facts_extractor"
-        assert step.action.task == "Read transcript"
+        assert step.action.subagent_id == "calculator_subagent"
+        assert step.action.task == "add 2 and 3"
 
     @pytest.mark.asyncio
     async def test_instructor_react_strict_mode_rejects_thought_only(self):

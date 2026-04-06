@@ -201,6 +201,19 @@ class StructuredReActLoop:
                         trace_name=f"agent-step-{step_num}-retry",
                         trace_metadata={"loop": "instructor-react", "step": step_num, "retry": True},
                     )
+                elif "either action or final_answer" in error_text:
+                    # LLM returned both action and final_answer as null; inject a corrective message
+                    # and retry so the loop can continue rather than crashing.
+                    logger.warning("  LLM returned neither action nor final_answer; injecting correction and retrying")
+                    self._messages.append({
+                        "role": "user",
+                        "content": (
+                            "Your last response was invalid: you must provide either an action "
+                            "(to delegate to a subagent) or a final_answer. You cannot leave both "
+                            "as null. Please respond again now with one of these."
+                        ),
+                    })
+                    continue
                 else:
                     raise
 
@@ -263,14 +276,22 @@ class StructuredReActLoop:
                     observation = f"ERROR: {type(e).__name__}: {e}"
                     logger.error(f"  Action failed: {observation}")
 
-                # Track completed subagent for pipeline enforcement
+                # Track completed subagent for pipeline enforcement.
+                # Only mark as completed when the observation doesn't indicate a failure.
+                _failure_prefixes = ("error:", "i'm unable", "i am unable", "i cannot", "could not", "failed to")
+                _obs_lower = observation.lower()
+                _is_failure = any(_obs_lower.startswith(p) for p in _failure_prefixes)
                 if action_name in self.required_pipeline and action_name not in self._completed_subagents:
-                    if not observation.startswith("ERROR:"):
+                    if not _is_failure:
                         self._completed_subagents.append(action_name)
                         remaining = [s for s in self.required_pipeline if s not in self._completed_subagents]
                         logger.info(
                             f"  Pipeline progress: completed '{action_name}'. "
                             f"Remaining: {remaining if remaining else 'none (pipeline complete)'}"
+                        )
+                    else:
+                        logger.warning(
+                            f"  Pipeline stage '{action_name}' reported a failure; not marking as complete."
                         )
 
                 logger.info(f"  Observation: {observation[:200]}")

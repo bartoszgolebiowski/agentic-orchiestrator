@@ -36,3 +36,7 @@ Use the output for `LANGFUSE_ENCRYPTION_KEY` and `LANGFUSE_NEXTAUTH_SECRET`. Set
 - One child span for the selected agent run.
 - One child span for each subagent execution.
 - One generation entry for every LLM call.
+
+## Configuration Reference
+
+See [configs/README.md](configs/README.md) for a simple guide to defining agents, subagents, tools, and MCP servers.

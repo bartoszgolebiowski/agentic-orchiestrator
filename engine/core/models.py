@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field, AliasChoices, model_validator
+
+from engine.mcp.models import McpServerConfig
 
 
 class RoleType(str, Enum):
@@ -80,52 +82,6 @@ class AgentReActStep(BaseModel):
         return self
 
 
-# ─── Transcript Analysis Models ───
-
-
-class SourceReference(BaseModel):
-    """A reference to a specific fragment of the transcript."""
-    quote: str = Field(description="Full verbatim quote from the transcript.")
-    context: str = Field(default="", description="Brief note about where in the transcript this appears (e.g. 'during budget discussion').")
-
-
-class Fact(BaseModel):
-    """A single extracted fact from the transcript."""
-    statement: str = Field(description="A concise factual statement extracted from the transcript.")
-    source: SourceReference = Field(description="Source quote and reference from the transcript.")
-
-
-class FactsSummary(BaseModel):
-    """Collection of all extracted facts from a transcript."""
-    facts: list[Fact] = Field(description="List of extracted facts.")
-
-
-class Conclusion(BaseModel):
-    """A single conclusion, recommendation, or insight derived from the transcript."""
-    statement: str = Field(description="The conclusion or recommendation.")
-    type: str = Field(description="Category: one of 'strength', 'weakness', 'risk', 'opportunity', 'recommendation', 'vision'.")
-    source: SourceReference = Field(description="Source quote and reference from the transcript.")
-
-
-class ConclusionsSummary(BaseModel):
-    """Collection of all conclusions drawn from the transcript."""
-    conclusions: list[Conclusion] = Field(description="List of conclusions and recommendations.")
-
-
-class ActionPoint(BaseModel):
-    """A single ticket-ready action point derived from transcript analysis."""
-    title: str = Field(description="Short, actionable title for the ticket.")
-    description: str = Field(description="Detailed description of what needs to be done.")
-    acceptance_criteria: list[str] = Field(description="List of measurable acceptance criteria.")
-    definition_of_done: list[str] = Field(description="List of conditions that define when this task is complete.")
-    priority: str = Field(description="Priority level: critical, high, medium, low.")
-    category: str = Field(description="Category or domain this action point belongs to.")
-    risk: str = Field(default="", description="Associated risks if this is not addressed.")
-    dependencies: list[str] = Field(default_factory=list, description="Other action points or external dependencies.")
-    estimate_effort: str = Field(default="", description="Estimated effort (e.g. 'S', 'M', 'L', 'XL' or hours).")
-    source_quotes: list[SourceReference] = Field(description="Full source quotes from the transcript that led to this action point.")
-
-
 class ToolParameter(BaseModel):
     type: str
     description: str
@@ -144,6 +100,7 @@ class NodeConfig(BaseModel):
     description: str
     system_prompt: str
     dependencies: list[str] = Field(default_factory=list)
+    mcp_dependencies: list[str] = Field(default_factory=list)
     required_pipeline: list[str] = Field(
         default_factory=list,
         description=(
@@ -159,6 +116,10 @@ class NodeConfig(BaseModel):
         if self.role_type == RoleType.AGENT and not self.dependencies:
             raise ValueError(
                 f"Agent '{self.id}' must declare at least one subagent dependency"
+            )
+        if self.role_type == RoleType.AGENT and self.mcp_dependencies:
+            raise ValueError(
+                f"Agent '{self.id}' cannot declare mcp_dependencies"
             )
         if self.role_type == RoleType.SUBAGENT and not self.dependencies:
             raise ValueError(
@@ -190,6 +151,7 @@ class EngineConfig(BaseModel):
     agents: dict[str, NodeConfig] = Field(default_factory=dict)
     subagents: dict[str, NodeConfig] = Field(default_factory=dict)
     tools: dict[str, ToolDefinition] = Field(default_factory=dict)
+    mcps: dict[str, McpServerConfig] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_references(self) -> "EngineConfig":
@@ -213,6 +175,11 @@ class EngineConfig(BaseModel):
                 if dep not in self.tools:
                     raise ValueError(
                         f"Subagent '{sub_id}' references unknown tool '{dep}'"
+                    )
+            for mcp_dep in sub.mcp_dependencies:
+                if mcp_dep not in self.mcps:
+                    raise ValueError(
+                        f"Subagent '{sub_id}' references unknown MCP server '{mcp_dep}'"
                     )
 
         return self
