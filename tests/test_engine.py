@@ -11,7 +11,9 @@ import engine.core.llm as llm
 import engine.core.tracing as tracing
 from engine.core.models import (
     AgentReActStep,
+    AgentReActStepOutput,
     DelegationAction,
+    DelegationActionOutput,
     NodeConfig,
     RoleType,
     RoutingDecision,
@@ -35,12 +37,15 @@ CONFIGS_DIR = Path(__file__).parent.parent / "configs"
 class TestYAMLLoading:
     def test_load_engine_config_succeeds(self):
         config = load_engine_config(CONFIGS_DIR)
-        assert set(config.agents) == {"math_agent", "document_agent"}
+        assert set(config.agents) == {"math_agent", "document_agent", "trello_update_agent"}
         assert set(config.subagents) == {
             "calculator_subagent",
             "markdown_extractor",
             "agile_mapper",
             "trello_publisher",
+            "trello_intake_parser",
+            "trello_task_matcher",
+            "trello_task_operator",
         }
         assert set(config.tools) == {
             "add",
@@ -49,6 +54,13 @@ class TestYAMLLoading:
             "read_markdown_structure",
         }
         assert set(config.mcps) == {"trello"}
+        assert set(config.enrichers) == {"document_discovery"}
+        assert config.enrichers["document_discovery"].executor == "glob_file_discovery"
+        assert config.enrichers["document_discovery"].enabled is True
+        assert config.enrichers["document_discovery"].executor_config == {
+            "workflow_config_file": "enrichers/document/document_workflow.yaml",
+            "input_key": "source_path",
+        }
         assert config.agents["math_agent"].dependencies == ["calculator_subagent"]
         assert config.agents["document_agent"].dependencies == ["markdown_extractor", "agile_mapper", "trello_publisher"]
         assert config.agents["document_agent"].required_pipeline == ["markdown_extractor", "agile_mapper", "trello_publisher"]
@@ -162,6 +174,51 @@ mcp_dependencies:
 
         with pytest.raises(ValueError, match="unknown MCP server"):
             load_engine_config(tmp_path)
+
+    def test_mcp_include_tools_invalid_server_ref_raises(self):
+        """mcp_include_tools referencing a server not in mcp_dependencies should fail."""
+        with pytest.raises(ValueError, match="mcp_include_tools references server"):
+            NodeConfig(
+                id="bad",
+                role_type=RoleType.SUBAGENT,
+                description="x",
+                system_prompt="x",
+                mcp_dependencies=["srv_a"],
+                mcp_include_tools={"srv_b": ["tool1"]},
+            )
+
+    def test_mcp_include_tools_agent_cannot_declare(self):
+        """Agents cannot use mcp_include_tools."""
+        with pytest.raises(ValueError, match="cannot declare mcp_include_tools"):
+            NodeConfig(
+                id="bad_agent",
+                role_type=RoleType.AGENT,
+                description="x",
+                system_prompt="x",
+                dependencies=["sub1"],
+                mcp_include_tools={"srv": ["tool"]},
+            )
+
+    def test_mcp_include_tools_valid_config_accepted(self):
+        """Valid mcp_include_tools passes validation."""
+        node = NodeConfig(
+            id="ok",
+            role_type=RoleType.SUBAGENT,
+            description="x",
+            system_prompt="x",
+            mcp_dependencies=["srv"],
+            mcp_include_tools={"srv": ["tool_a", "tool_b"]},
+        )
+        assert node.mcp_include_tools == {"srv": ["tool_a", "tool_b"]}
+
+    def test_mcp_include_tools_loaded_from_yaml(self):
+        """Verify mcp_include_tools round-trips through real config loading."""
+        config = load_engine_config(CONFIGS_DIR)
+        matcher = config.subagents["trello_task_matcher"]
+        assert "trello" in matcher.mcp_include_tools
+        assert "list_boards" in matcher.mcp_include_tools["trello"]
+        operator = config.subagents["trello_task_operator"]
+        assert "add_comment" in operator.mcp_include_tools["trello"]
 
     def test_invalid_yaml_missing_role_type(self, tmp_path):
         agents_dir = tmp_path / "agents"
@@ -516,6 +573,10 @@ class TestTracingIntegration:
         )
 
         assert decision.input_json == {"source_path": "docs/example.md"}
+
+    def test_provider_output_models_do_not_expose_input_json(self):
+        assert "input_json" not in DelegationActionOutput.model_json_schema()["properties"]
+        assert "input_json" not in AgentReActStepOutput.model_json_schema()["properties"]
 
 
 # ─── Pydantic Response Models ───

@@ -5,6 +5,7 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
+from engine.core.events import EventType, emit_event
 from engine.core.models import NodeConfig, RoleType, EngineConfig
 from engine.core.react import ReActLoop
 from engine.core.security import enforce_agent_boundary
@@ -54,6 +55,24 @@ class SubagentExecutor:
 
         descriptors = await self.mcp_manager.describe_tools(self.config.mcp_dependencies)
 
+        if self.config.mcp_include_tools:
+            filtered = []
+            for descriptor in descriptors:
+                server_filter = self.config.mcp_include_tools.get(descriptor.server_id)
+                if server_filter is None:
+                    filtered.append(descriptor)
+                elif descriptor.remote_name in set(server_filter):
+                    filtered.append(descriptor)
+            for server_id, allowed_names in self.config.mcp_include_tools.items():
+                discovered = {d.remote_name for d in descriptors if d.server_id == server_id}
+                missing = set(allowed_names) - discovered
+                if missing:
+                    raise ValueError(
+                        f"Subagent '{self.config.id}' mcp_include_tools references "
+                        f"unknown tools from server '{server_id}': {sorted(missing)}"
+                    )
+            descriptors = filtered
+
         specs: list[dict[str, Any]] = []
         descriptions: list[str] = []
         allowed_ids: list[str] = []
@@ -82,6 +101,8 @@ class SubagentExecutor:
     async def execute(self, task: str, input_json: Any | None = None) -> str:
         logger.info(f"SubagentExecutor[{self.config.id}] starting task: {task[:100]}")
 
+        emit_event(EventType.SUBAGENT_STARTED, subagent_id=self.config.id, task=task[:200])
+
         system_prompt = self.config.system_prompt
 
         local_tool_specs, local_descriptions, local_allowed_ids = self._build_local_tool_specs()
@@ -106,6 +127,12 @@ class SubagentExecutor:
 
             if name in self.engine_config.tools:
                 tool_fn = get_tool(name)
+                emit_event(
+                    EventType.TOOL_CALL_STARTED,
+                    subagent_id=self.config.id,
+                    tool=name,
+                    arguments=arguments,
+                )
                 with observe(
                     name=f"tool:{name}",
                     as_type="span",
@@ -121,6 +148,12 @@ class SubagentExecutor:
                     result_text = str(result)
                     if tool_span is not None:
                         tool_span.update(output=result_text)
+                    emit_event(
+                        EventType.TOOL_CALL_FINISHED,
+                        subagent_id=self.config.id,
+                        tool=name,
+                        result=result_text[:500],
+                    )
                     return result_text
 
             if name in mcp_allowed_ids:
@@ -128,6 +161,14 @@ class SubagentExecutor:
                     raise ValueError(
                         f"Subagent '{self.config.id}' cannot call MCP tool '{name}' without an MCP manager"
                     )
+
+                emit_event(
+                    EventType.TOOL_CALL_STARTED,
+                    subagent_id=self.config.id,
+                    tool=name,
+                    arguments=arguments,
+                    source="mcp",
+                )
 
                 with observe(
                     name=f"tool:{name}",
@@ -143,6 +184,13 @@ class SubagentExecutor:
                     result_text = await self.mcp_manager.call_tool(name, arguments)
                     if tool_span is not None:
                         tool_span.update(output=result_text)
+                    emit_event(
+                        EventType.TOOL_CALL_FINISHED,
+                        subagent_id=self.config.id,
+                        tool=name,
+                        result=result_text[:500],
+                        source="mcp",
+                    )
                     return result_text
 
             raise KeyError(f"Subagent '{self.config.id}' cannot resolve action '{name}'")
@@ -165,4 +213,10 @@ class SubagentExecutor:
             result = await loop.run(task, input_json=input_json)
             if subagent_span is not None:
                 subagent_span.update(output=result)
+
+            emit_event(
+                EventType.SUBAGENT_FINISHED,
+                subagent_id=self.config.id,
+                result=result[:500],
+            )
             return result

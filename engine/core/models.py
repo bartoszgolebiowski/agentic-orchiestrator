@@ -32,8 +32,8 @@ class ModelSpec(BaseModel):
 # ─── Instructor Response Models ───
 
 
-class RoutingDecision(BaseModel):
-    """Orchestrator's structured routing decision."""
+class RoutingDecisionOutput(BaseModel):
+    """Provider-safe orchestrator routing decision."""
     model_config = ConfigDict(extra="forbid")
     agent_id: str = Field(
         description="The ID of the selected agent.",
@@ -44,6 +44,10 @@ class RoutingDecision(BaseModel):
         default="",
         description="The task to pass to the selected agent, reformulated if needed.",
     )
+
+
+class RoutingDecision(RoutingDecisionOutput):
+    """Orchestrator's structured routing decision."""
     input_json: dict[str, Any] | None = Field(
         default=None,
         description="Optional structured input to pass to the selected agent.",
@@ -65,11 +69,19 @@ class RoutingDecision(BaseModel):
         return values
 
 
-class DelegationAction(BaseModel):
-    """An action where an Agent delegates a sub-task to a Subagent."""
+class DelegationActionOutput(BaseModel):
+    """Provider-safe action where an Agent delegates a sub-task to a Subagent."""
     model_config = ConfigDict(extra="forbid")
-    subagent_id: str = Field(description="The ID of the subagent to delegate to.")
+    subagent_id: str = Field(
+        description="The ID of the subagent to delegate to.",
+        validation_alias=AliasChoices("subagent_id", "subagent"),
+        serialization_alias="subagent_id",
+    )
     task: str = Field(description="The specific sub-task to delegate.")
+
+
+class DelegationAction(DelegationActionOutput):
+    """An action where an Agent delegates a sub-task to a Subagent."""
     input_json: dict[str, Any] | None = Field(
         default=None,
         description="Optional structured input to pass to the subagent.",
@@ -91,17 +103,25 @@ class DelegationAction(BaseModel):
         return values
 
 
-class AgentReActStep(BaseModel):
-    """A single ReAct reasoning step for an Agent (planning layer)."""
+class AgentReActStepOutput(BaseModel):
+    """Provider-safe single ReAct reasoning step for an Agent."""
     model_config = ConfigDict(extra="forbid")
     thought: str = Field(description="Your reasoning about the current state and what to do next.")
-    action: DelegationAction | None = Field(
+    action: DelegationActionOutput | None = Field(
         default=None,
         description="If you need to delegate a sub-task, specify the subagent and task. Leave null if you have the final answer.",
     )
     final_answer: str | None = Field(
         default=None,
         description="If you have enough information to answer, provide the final answer here. Leave null if you need to delegate.",
+    )
+
+
+class AgentReActStep(AgentReActStepOutput):
+    """A single ReAct reasoning step for an Agent (planning layer)."""
+    action: DelegationAction | None = Field(
+        default=None,
+        description="If you need to delegate a sub-task, specify the subagent and task. Leave null if you have the final answer.",
     )
 
     @model_validator(mode="before")
@@ -174,6 +194,14 @@ class NodeConfig(BaseModel):
     system_prompt: str
     dependencies: list[str] = Field(default_factory=list)
     mcp_dependencies: list[str] = Field(default_factory=list)
+    mcp_include_tools: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-MCP-server tool allowlist. Maps server ID to a list of remote "
+            "tool names this subagent may use. Servers not listed here expose all "
+            "their tools. An empty list means no tools from that server."
+        ),
+    )
     required_pipeline: list[str] = Field(
         default_factory=list,
         description=(
@@ -194,6 +222,16 @@ class NodeConfig(BaseModel):
             raise ValueError(
                 f"Agent '{self.id}' cannot declare mcp_dependencies"
             )
+        if self.role_type == RoleType.AGENT and self.mcp_include_tools:
+            raise ValueError(
+                f"Agent '{self.id}' cannot declare mcp_include_tools"
+            )
+        for server_id in self.mcp_include_tools:
+            if server_id not in self.mcp_dependencies:
+                raise ValueError(
+                    f"Node '{self.id}' mcp_include_tools references server "
+                    f"'{server_id}' which is not in mcp_dependencies"
+                )
         for step in self.required_pipeline:
             if step not in self.dependencies:
                 raise ValueError(
@@ -215,12 +253,51 @@ class OrchestratorConfig(BaseModel):
     model: str | None = Field(default=None, description="LLM model override for orchestrator.")
 
 
+# ─── Enrichment Models ───
+
+
+class EnricherConfig(BaseModel):
+    """A config-driven pre-orchestration enricher loaded from configs/enrichers/*.yaml."""
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    description: str = Field(description="Human-readable description shown to the LLM selector.")
+    priority: int = Field(default=50, ge=0, le=100, description="Higher priority wins when multiple enrichers match. 0-100.")
+    enabled: bool = Field(default=True, description="Set to false to disable without removing the file.")
+    executor: str = Field(description="Executor type. Built-in: 'glob_file_discovery'.")
+    executor_config: dict[str, Any] = Field(default_factory=dict, description="Executor-specific settings.")
+    model: str | None = Field(default=None, description="LLM model override for the enrichment selector step.")
+
+    @model_validator(mode="after")
+    def validate_enricher(self) -> "EnricherConfig":
+        if not self.id.strip():
+            raise ValueError("Enricher id cannot be empty")
+        if not self.executor.strip():
+            raise ValueError(f"Enricher '{self.id}' must specify an executor")
+        return self
+
+
+class EnrichmentDecision(BaseModel):
+    """Structured output from the LLM enrichment selector."""
+    model_config = ConfigDict(extra="forbid")
+
+    enricher_id: str | None = Field(
+        default=None,
+        description="The ID of the selected enricher, or null if no enrichment is needed.",
+    )
+    reason: str = Field(
+        default="",
+        description="Brief reason for the selection or why no enricher applies.",
+    )
+
+
 class EngineConfig(BaseModel):
     orchestrator: OrchestratorConfig = Field(default_factory=OrchestratorConfig)
     agents: dict[str, NodeConfig] = Field(default_factory=dict)
     subagents: dict[str, NodeConfig] = Field(default_factory=dict)
     tools: dict[str, ToolDefinition] = Field(default_factory=dict)
     mcps: dict[str, McpServerConfig] = Field(default_factory=dict)
+    enrichers: dict[str, EnricherConfig] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_references(self) -> "EngineConfig":

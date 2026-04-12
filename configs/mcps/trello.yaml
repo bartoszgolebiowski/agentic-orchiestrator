@@ -1,5 +1,5 @@
 id: trello
-description: Trello MCP server for publishing generated document plans.
+description: Trello MCP server for document publishing and card updates.
 connection:
   transport: stdio
   command: npx
@@ -10,3 +10,32 @@ connection:
     TRELLO_API_KEY: ${TRELLO_API_KEY}
     TRELLO_TOKEN: ${TRELLO_TOKEN}
 tool_prefix: trello
+tools:
+  - list_boards                          # List all boards the user has access to
+  - list_workspaces                      # List all workspaces the user has access to
+  - list_boards_in_workspace             # List all boards in a specific workspace
+  - set_active_board                     # Set the active board for future operations
+  - set_active_workspace                 # Set the active workspace for future operations
+  - get_active_board_info                # Get info about the currently active board
+  - get_lists                            # Retrieve all lists from a board
+  - get_recent_activity                  # Fetch recent activity on a board
+  - get_card                             # Get comprehensive card details (checklists, labels, etc.)
+  - get_cards_by_list_id                 # Fetch all cards from a specific list
+  - get_my_cards                         # Fetch all cards assigned to the current user
+  - add_card_to_list                     # Add a new card to a specified list
+  - update_card_details                  # Update an existing card's details (name, desc, dates)
+  - move_card                            # Move a card to a different list
+  - archive_card                         # Send a card to the archive
+  - get_checklist_by_name                # Get a complete checklist with completion percentage
+  - get_checklist_items                  # Get all items from a checklist by name
+  - add_checklist_item                   # Add a new item to an existing checklist
+  - find_checklist_items_by_description  # Search for checklist items containing specific text
+  - get_acceptance_criteria              # Get all items from the "Acceptance Criteria" checklist
+  - add_comment                          # Add a comment to a Trello card
+  - update_comment                       # Update an existing comment on a card
+  - delete_comment                       # Delete a comment from a card
+  - get_card_comments                    # Retrieve all comments from a specific card
+  - attach_image_to_card                 # Attach an image to a card from a URL
+  - attach_file_to_card                  # Attach any file/URL/local path to a card
+  - add_list_to_board                    # Add a new list to a board
+  - archive_list                         # Send a list to the archive

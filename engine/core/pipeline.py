@@ -128,5 +128,7 @@ class PipelineState:
 
 
 def is_failure_observation(observation: str) -> bool:
+    if not observation.strip():
+        return True
     lower = observation.lower()
     return any(lower.startswith(prefix) for prefix in _FAILURE_PREFIXES)

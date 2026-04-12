@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from enum import Enum
 from textwrap import indent
 from typing import Any
+import inspect
 
 from openai import AsyncOpenAI, BadRequestError
 from pydantic import BaseModel
 
 from engine.core.tracing import observe
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_base_url() -> str | None:
@@ -84,6 +89,19 @@ def _tool_name(tool_spec: dict[str, Any]) -> str:
     return str(tool_spec)
 
 
+def _structured_completion_endpoint(client: AsyncOpenAI) -> tuple[Any, str]:
+    responses = getattr(client, "responses", None)
+    if responses is not None:
+        return responses, "responses"
+
+    chat = getattr(client, "chat", None)
+    completions = getattr(chat, "completions", None) if chat is not None else None
+    if completions is not None:
+        return completions, "chat"
+
+    raise AttributeError("OpenAI client does not expose responses or chat.completions")
+
+
 def _format_message_thread(
     messages: list[dict[str, Any]],
     *,
@@ -126,8 +144,16 @@ def _format_message_thread(
             for tool_call in tool_calls:
                 if isinstance(tool_call, dict):
                     function = tool_call.get("function") or {}
-                    tool_name = function.get("name", "unknown") if isinstance(function, dict) else "unknown"
-                    arguments = function.get("arguments", "") if isinstance(function, dict) else ""
+                    tool_name = (
+                        function.get("name", "unknown")
+                        if isinstance(function, dict)
+                        else "unknown"
+                    )
+                    arguments = (
+                        function.get("arguments", "")
+                        if isinstance(function, dict)
+                        else ""
+                    )
                     lines.append(f"    - {tool_name}({arguments})")
                 else:
                     lines.append(f"    - {_format_trace_value(tool_call)}")
@@ -181,7 +207,9 @@ async def chat_completion(
 
         message = response.choices[0].message
         if generation is not None:
-            update_kwargs: dict[str, Any] = {"output": _format_trace_value(_model_dump(message))}
+            update_kwargs: dict[str, Any] = {
+                "output": _format_trace_value(_model_dump(message))
+            }
             usage = getattr(response, "usage", None)
             usage_dump = _model_dump(usage)
             if usage_dump is not None:
@@ -202,6 +230,7 @@ async def structured_completion(
 ) -> Any:
     """Native structured-output completion — returns a validated Pydantic model."""
     model_name = model or get_model()
+    completions, api_kind = _structured_completion_endpoint(client)
     trace_input = _format_message_thread(
         messages,
         model_name=model_name,
@@ -215,30 +244,76 @@ async def structured_completion(
         model=model_name,
         metadata=trace_metadata,
     ) as generation:
+        # Detect whether the provider client supports the optional
+        # 'reasoning_effort' parameter on the parse/create endpoints.
+        supports_reasoning_parse = False
+        supports_reasoning_create = False
         try:
-            response = await client.responses.parse(
-                model=model_name,
-                input=messages,
-                text_format=response_model,
-                temperature=temperature,
-                extra_body={"reasoning": {"enabled": True}},
+            supports_reasoning_parse = 'reasoning_effort' in inspect.signature(
+                completions.parse
+            ).parameters
+        except (ValueError, TypeError, AttributeError):
+            supports_reasoning_parse = False
+        try:
+            supports_reasoning_create = (
+                hasattr(completions, "create")
+                and 'reasoning_effort' in inspect.signature(completions.create).parameters
             )
-        except BadRequestError as exc:
-            error_text = str(exc).lower()
-            if "response_format" not in error_text or "invalid" not in error_text:
+        except (ValueError, TypeError, AttributeError):
+            supports_reasoning_create = False
+
+        parse_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "temperature": temperature,
+        }
+        if supports_reasoning_parse:
+            parse_kwargs["reasoning_effort"] = "xhigh"
+
+        if api_kind == "responses":
+            parse_kwargs["input"] = messages
+            parse_kwargs["text_format"] = response_model
+        else:
+            parse_kwargs["messages"] = messages
+            parse_kwargs["response_format"] = response_model
+
+        try:
+            response = await completions.parse(**parse_kwargs)
+        except TypeError as exc:
+            # Some client variants will raise a TypeError locally when
+            # an unexpected keyword is provided (e.g., 'reasoning_effort').
+            # If that happens, retry without the parameter.
+            if "reasoning_effort" in str(exc) and "reasoning_effort" in parse_kwargs:
+                parse_kwargs.pop("reasoning_effort", None)
+                try:
+                    response = await completions.parse(**parse_kwargs)
+                except Exception as exc2:
+                    if generation is not None:
+                        generation.update(output=f"ERROR: {type(exc2).__name__}: {exc2}")
+                    raise
+            else:
                 if generation is not None:
                     generation.update(output=f"ERROR: {type(exc).__name__}: {exc}")
                 raise
+        except BadRequestError:
+            logger.warning("Structured output parse was rejected by the provider; retrying with JSON mode")
+            create_kwargs: dict[str, Any] = {
+                "model": model_name,
+                "temperature": temperature,
+            }
+            if supports_reasoning_create:
+                create_kwargs["reasoning_effort"] = "xhigh"
+            if api_kind == "responses":
+                create_kwargs["input"] = messages
+                create_kwargs["text"] = {"format": {"type": "json_object"}}
+            else:
+                create_kwargs["messages"] = messages
+                create_kwargs["response_format"] = {"type": "json_object"}
 
             try:
-                response = await client.responses.create(
-                    model=model_name,
-                    input=messages,
-                    text={"format": {"type": "json_object"}},
-                )
-            except Exception as fallback_exc:
+                response = await completions.create(**create_kwargs)
+            except Exception as exc:
                 if generation is not None:
-                    generation.update(output=f"ERROR: {type(fallback_exc).__name__}: {fallback_exc}")
+                    generation.update(output=f"ERROR: {type(exc).__name__}: {exc}")
                 raise
         except Exception as exc:
             if generation is not None:
@@ -247,13 +322,23 @@ async def structured_completion(
 
         parsed = getattr(response, "output_parsed", None)
         if parsed is None:
-            message = response.choices[0].message if getattr(response, "choices", None) else None
+            message = (
+                response.choices[0].message
+                if getattr(response, "choices", None)
+                else None
+            )
             parsed = getattr(message, "parsed", None) if message is not None else None
         if parsed is None:
             content = getattr(response, "output_text", None)
             if content is None:
-                message = response.choices[0].message if getattr(response, "choices", None) else None
-                content = getattr(message, "content", None) if message is not None else None
+                message = (
+                    response.choices[0].message
+                    if getattr(response, "choices", None)
+                    else None
+                )
+                content = (
+                    getattr(message, "content", None) if message is not None else None
+                )
             if content is None:
                 raise ValueError("Structured completion returned no parsable output")
             parsed = response_model.model_validate_json(content)

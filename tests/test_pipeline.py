@@ -57,6 +57,14 @@ class TestPipelineState:
         assert result is not None
         assert result.status == StageStatus.FAILED
 
+    @pytest.mark.parametrize("observation", ["", "   ", "\n\t"])
+    def test_observe_result_rejects_blank_observation(self, observation):
+        pipeline = PipelineState(["a"])
+        pipeline.observe_result("a", observation)
+        result = pipeline.get_result("a")
+        assert result is not None
+        assert result.status == StageStatus.FAILED
+
     def test_observe_result_ignores_non_pipeline_actions(self):
         pipeline = PipelineState(["a"])
         pipeline.observe_result("unknown_action", "some result")

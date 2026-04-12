@@ -9,9 +9,10 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from engine.core.contracts import normalize_handoff_payload, validate_model_payload
+from engine.core.events import EventType, emit_event
 from engine.core.llm import chat_completion, structured_completion
-from engine.core.models import AgentReActStep
-from engine.core.pipeline import PipelineState
+from engine.core.models import AgentReActStep, AgentReActStepOutput
+from engine.core.pipeline import PipelineState, is_failure_observation
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,38 @@ class StepResult:
 
 
 ActionHandler = Callable[[str, dict[str, Any]], Awaitable[str]]
+
+
+def _to_jsonable(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, dict):
+        return {key: _to_jsonable(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, tuple):
+        return [_to_jsonable(item) for item in value]
+    if hasattr(value, "__dict__"):
+        return {
+            key: _to_jsonable(item)
+            for key, item in vars(value).items()
+            if not key.startswith("_")
+        }
+    return value
+
+
+def _structured_payload_to_mapping(payload: Any) -> dict[str, Any]:
+    if isinstance(payload, dict):
+        return {key: _to_jsonable(item) for key, item in payload.items()}
+    if hasattr(payload, "model_dump"):
+        return payload.model_dump(mode="json")
+    if hasattr(payload, "__dict__"):
+        return {
+            key: _to_jsonable(item)
+            for key, item in vars(payload).items()
+            if not key.startswith("_")
+        }
+    raise TypeError(f"Unsupported structured payload type: {type(payload)!r}")
 
 
 @dataclass
@@ -96,6 +129,13 @@ class ReActLoop:
 
                     logger.info(f"  Action: {fn_name}({fn_args})")
 
+                    emit_event(
+                        EventType.SUBAGENT_STEP,
+                        step=step_num,
+                        action=fn_name,
+                        arguments=fn_args,
+                    )
+
                     try:
                         observation = await self.action_handler(fn_name, fn_args)
                     except Exception as e:
@@ -117,6 +157,17 @@ class ReActLoop:
                     ))
             else:
                 final_answer = response.content or ""
+                if not final_answer.strip():
+                    logger.warning("  Final answer was empty; retrying")
+                    self._messages.append(response.model_dump())
+                    self._messages.append({
+                        "role": "user",
+                        "content": (
+                            "Your previous response was empty. Call one of the available tools "
+                            "or return a non-empty final answer."
+                        ),
+                    })
+                    continue
                 logger.info(f"  Final answer: {final_answer[:200]}")
                 self._messages.append(response.model_dump())
 
@@ -219,9 +270,9 @@ class StructuredReActLoop:
             f"Available subagents you can delegate to:\n{self.available_actions}\n\n"
             f"Respond as structured JSON with exactly these fields:\n"
             f"- thought: string\n"
-            f"- action: null or an object with at least {{\"subagent_id\": string, \"task\": string}} and optional \"input_json\": object\n"
+            f"- action: null or an object with at least {{\"subagent_id\": string, \"task\": string}}\n"
             f"- final_answer: null or string\n\n"
-            f"If you delegate to a subagent with an input contract, include input_json that matches that contract.\n"
+            f"Do not emit input_json in the structured response. The runtime will forward the current input_json payload to the delegated subagent automatically when present.\n"
             f"Use action as an object, not as a JSON string. Use the exact field name subagent_id.\n"
             f"Important: emit exactly one action per response at most. Do not batch multiple actions, "
             f"multiple subagents, or multiple stages in one turn. If more work is needed, wait for the next turn."
@@ -258,13 +309,16 @@ class StructuredReActLoop:
             logger.info(f"StructuredReAct step {step_num}/{self.max_steps}")
 
             try:
-                step: AgentReActStep = await structured_completion(
+                provider_step = await structured_completion(
                     client=self.client,
                     messages=self._messages,
-                    response_model=AgentReActStep,
+                    response_model=AgentReActStepOutput,
                     model=self.model,
                     trace_name=f"agent-step-{step_num}",
                     trace_metadata={"loop": "instructor-react", "step": step_num, "max_steps": self.max_steps},
+                )
+                step: AgentReActStep = AgentReActStep.model_validate(
+                    _structured_payload_to_mapping(provider_step)
                 )
             except Exception as exc:
                 error_text = str(exc).lower()
@@ -272,15 +326,22 @@ class StructuredReActLoop:
                     logger.warning("  Structured output returned multiple tool calls; retrying once with stricter single-action instruction")
                     self._retried_single_action = True
                     self._strengthen_single_action_instruction()
-                    step = await structured_completion(
+                    provider_step = await structured_completion(
                         client=self.client,
                         messages=self._messages,
-                        response_model=AgentReActStep,
+                        response_model=AgentReActStepOutput,
                         model=self.model,
                         trace_name=f"agent-step-{step_num}-retry",
                         trace_metadata={"loop": "instructor-react", "step": step_num, "retry": True},
                     )
+                    step = AgentReActStep.model_validate(
+                        _structured_payload_to_mapping(provider_step)
+                    )
                 elif "either action or final_answer" in error_text:
+                    if not self.allow_thought_as_final:
+                        raise ValueError(
+                            "Planner produced no action and no final answer; strict mode requires delegation or a final answer"
+                        )
                     # LLM returned both action and final_answer as null; inject a corrective message
                     # and retry so the loop can continue rather than crashing.
                     logger.warning("  LLM returned neither action nor final_answer; injecting correction and retrying")
@@ -297,6 +358,14 @@ class StructuredReActLoop:
                     raise
 
             logger.info(f"  Thought: {step.thought[:200]}")
+
+            emit_event(
+                EventType.AGENT_STEP,
+                step=step_num,
+                thought=step.thought[:500],
+                has_action=step.action is not None,
+                has_final=step.final_answer is not None,
+            )
 
             final_answer = step.final_answer
             if final_answer is not None and final_answer.strip().lower() == "null":
@@ -420,7 +489,7 @@ class StructuredReActLoop:
 
                 logger.info(f"  Observation: {observation[:200]}")
 
-                if not observation.startswith("ERROR:"):
+                if observation.strip() and not is_failure_observation(observation):
                     self._handoff_payload = normalize_handoff_payload(observation)
 
                 self._messages.append({

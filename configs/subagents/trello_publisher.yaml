@@ -8,4 +8,12 @@ system_prompt: >
   status message only.
 mcp_dependencies:
   - trello
-max_steps: 8
+mcp_include_tools:
+  trello:
+    - list_boards
+    - set_active_board
+    - get_lists
+    - add_card_to_list
+    - add_checklist_item
+    - get_checklist_by_name
+max_steps: 20

@@ -5,4 +5,4 @@ description: >
 system_prompt: >
   You are an Agile mapper. Transform the extracted markdown input_json into a DocumentPlan JSON
   payload and return JSON only. Do not call any structured-output helper.
-max_steps: 5
+max_steps: 12

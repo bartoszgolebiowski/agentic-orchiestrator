@@ -5,6 +5,7 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
+from engine.core.events import EventType, emit_event
 from engine.core.models import NodeConfig, RoleType, EngineConfig
 from engine.core.react import StructuredReActLoop
 from engine.core.security import enforce_agent_boundary, enforce_no_direct_tool_access
@@ -64,6 +65,13 @@ class AgentPlanner:
         input_json = arguments.get("input_json")
 
         logger.info(f"AgentPlanner[{self.config.id}] delegating to subagent '{name}': {task[:100]}")
+
+        emit_event(
+            EventType.AGENT_DELEGATION,
+            agent_id=self.config.id,
+            subagent_id=name,
+            task=task,
+        )
 
         with observe(
             name=f"subagent-run:{name}",

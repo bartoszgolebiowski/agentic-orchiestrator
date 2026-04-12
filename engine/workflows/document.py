@@ -45,17 +45,32 @@ def _resolve_relative_path(base_dir: Path, raw_value: str | None) -> Path | None
     return (base_dir / path).resolve()
 
 
-def load_document_workflow_config(config_dir: Path) -> DocumentWorkflowConfig | None:
-    config_path = config_dir / "document_workflow.yaml"
-    if not config_path.exists():
-        return None
+def load_document_workflow_config(
+    config_dir: Path,
+    workflow_config_file: str | None = None,
+) -> DocumentWorkflowConfig | None:
+    if workflow_config_file is None:
+        config_path = config_dir / "document_workflow.yaml"
+        if not config_path.exists():
+            matches = sorted(config_dir.rglob("document_workflow.yaml"))
+            if not matches:
+                return None
+            if len(matches) > 1:
+                raise ValueError(
+                    f"Multiple document_workflow.yaml files found under {config_dir}"
+                )
+            config_path = matches[0]
+    else:
+        config_path = (config_dir / Path(workflow_config_file)).resolve()
+        if not config_path.exists():
+            return None
 
     raw = _expand_env_values(_load_yaml(config_path))
-    source_dir = _resolve_relative_path(config_path.parent, raw.get("source_dir"))
+    source_dir = _resolve_relative_path(config_dir, raw.get("source_dir"))
     if source_dir is None:
         raise ValueError("document_workflow.yaml must define source_dir")
 
-    output_dir = _resolve_relative_path(config_path.parent, raw.get("output_dir"))
+    output_dir = _resolve_relative_path(config_dir, raw.get("output_dir"))
 
     return DocumentWorkflowConfig(
         source_dir=source_dir,
@@ -90,10 +105,23 @@ def should_run_document_workflow(query: str) -> bool:
         "epics",
         "story",
         "stories",
-        "task",
-        "tasks",
-        "trello",
     )
+    # Exclude queries that target existing Trello card updates rather than
+    # document-to-Trello publishing so the orchestrator can route them to
+    # the trello_update_agent instead.
+    update_signals = (
+        "update card",
+        "move card",
+        "add comment",
+        "log progress",
+        "change status",
+        "update trello",
+        "update task",
+        "confirmed_card_id",
+        "card_id",
+    )
+    if any(signal in lowered for signal in update_signals):
+        return False
     return any(keyword in lowered for keyword in keywords)
 
 

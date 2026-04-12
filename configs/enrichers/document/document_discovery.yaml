@@ -1,0 +1,13 @@
+id: document_discovery
+description: >
+  Auto-discovers markdown documents from a configured source directory and
+  provides each file path as input to the orchestrator. Select this enricher
+  when the user wants to process, analyze, or publish markdown documents,
+  notes, epics, or stories — but NOT when they want to update existing
+  Trello cards or log progress against tasks.
+priority: 50
+enabled: true
+executor: glob_file_discovery
+executor_config:
+  workflow_config_file: enrichers/document/document_workflow.yaml
+  input_key: source_path

@@ -14,4 +14,4 @@ required_pipeline:
   - markdown_extractor
   - agile_mapper
   - trello_publisher
-max_steps: 8
+max_steps: 12

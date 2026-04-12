@@ -17,14 +17,10 @@ from engine.core.loader import load_engine_config
 from engine.core.graph import validate_config_graph, build_dependency_tree
 from engine.core.runtime_state import clear_engine_config, set_engine_config
 from engine.core.tracing import observe, flush, log_langfuse_connection_status
+from engine.core.enrichment import apply_enrichment
+from engine.core.events import EventType, emit_event
 from engine.mcp.runtime import McpManager
 from engine.roles.orchestrator import Orchestrator
-from engine.workflows.document import (
-    build_document_input,
-    discover_markdown_sources,
-    load_document_workflow_config,
-    should_run_document_workflow,
-)
 
 
 logging.basicConfig(
@@ -40,12 +36,11 @@ async def _run_orchestrator_query(
     config_dir: str,
     input_json: dict[str, Any] | None = None,
 ) -> str:
-    run_id = uuid4().hex
     with observe(
-        name="agent-request",
+        name="agent-run",
         as_type="span",
         input={"query": query, "config_dir": config_dir, "input_json": input_json},
-        metadata={"run_id": run_id, "entrypoint": "main"},
+        metadata={"entrypoint": "main"},
     ) as root_span:
         result = await orchestrator.handle(query, input_json=input_json)
         if root_span is not None:
@@ -56,6 +51,8 @@ async def _run_orchestrator_query(
 async def main(query: str, config_dir: str = "configs", input_json: dict[str, Any] | None = None) -> str:
     load_dotenv()
     log_langfuse_connection_status()
+
+    emit_event(EventType.RUN_STARTED, query=query, config_dir=config_dir)
 
     config_path = Path(config_dir)
     engine_config = load_engine_config(config_path)
@@ -79,7 +76,8 @@ async def main(query: str, config_dir: str = "configs", input_json: dict[str, An
         f"Loaded {len(engine_config.agents)} agents, "
         f"{len(engine_config.subagents)} subagents, "
         f"{len(engine_config.tools)} tools, "
-        f"{len(engine_config.mcps)} MCP servers"
+        f"{len(engine_config.mcps)} MCP servers, "
+        f"{len(engine_config.enrichers)} enrichers"
     )
 
     client = get_raw_client()
@@ -105,40 +103,73 @@ async def main(query: str, config_dir: str = "configs", input_json: dict[str, An
             mcp_manager=mcp_manager,
         )
 
-        workflow_config = load_document_workflow_config(config_path)
-        if input_json is None and workflow_config is not None and should_run_document_workflow(query):
-            source_paths = discover_markdown_sources(workflow_config.source_dir, workflow_config.scan_pattern)
-            if not source_paths:
-                raise FileNotFoundError(
-                    f"No markdown files found in '{workflow_config.source_dir}' using pattern '{workflow_config.scan_pattern}'"
-                )
-
-            if len(source_paths) == 1:
-                return await _run_orchestrator_query(
-                    orchestrator=orchestrator,
+        run_id = uuid4().hex
+        with observe(
+            name="agent-request",
+            as_type="span",
+            input={"query": query, "config_dir": config_dir, "input_json": input_json},
+            metadata={"run_id": run_id, "entrypoint": "main"},
+        ) as root_span:
+            # ── Generic enrichment: LLM-selected, config-driven ──
+            if input_json is None and engine_config.enrichers:
+                emit_event(EventType.ENRICHMENT_STARTED)
+                enrichment = await apply_enrichment(
+                    client=client,
                     query=query,
-                    config_dir=config_dir,
-                    input_json=build_document_input(source_paths[0]),
+                    enrichers=engine_config.enrichers,
+                    config_dir=config_path,
+                    model=engine_config.orchestrator.model,
                 )
 
-            results: list[str] = []
-            for source_path in source_paths:
-                result = await _run_orchestrator_query(
-                    orchestrator=orchestrator,
-                    query=query,
-                    config_dir=config_dir,
-                    input_json=build_document_input(source_path),
-                )
-                results.append(f"## {source_path.name}\n{result}")
+                if enrichment.payloads:
+                    emit_event(
+                        EventType.ENRICHMENT_RESULT,
+                        enricher_id=enrichment.enricher_id,
+                        payload_count=len(enrichment.payloads),
+                    )
+                    if len(enrichment.payloads) == 1:
+                        result = await _run_orchestrator_query(
+                            orchestrator=orchestrator,
+                            query=query,
+                            config_dir=config_dir,
+                            input_json=enrichment.payloads[0],
+                        )
+                        if root_span is not None:
+                            root_span.update(output=result)
+                        emit_event(EventType.TOKEN_DELTA, content=result)
+                        emit_event(EventType.RUN_FINISHED, result=result[:500])
+                        return result
 
-            return "\n\n".join(results)
+                    results: list[str] = []
+                    for payload in enrichment.payloads:
+                        label = next(iter(payload.values()), "item") if payload else "item"
+                        result = await _run_orchestrator_query(
+                            orchestrator=orchestrator,
+                            query=query,
+                            config_dir=config_dir,
+                            input_json=payload,
+                        )
+                        results.append(f"## {label}\n{result}")
 
-        return await _run_orchestrator_query(
-            orchestrator=orchestrator,
-            query=query,
-            config_dir=config_dir,
-            input_json=input_json,
-        )
+                    final_result = "\n\n".join(results)
+                    if root_span is not None:
+                        root_span.update(output=final_result)
+                    emit_event(EventType.TOKEN_DELTA, content=final_result)
+                    emit_event(EventType.RUN_FINISHED, result=final_result[:500])
+                    return final_result
+
+            result = await _run_orchestrator_query(
+                orchestrator=orchestrator,
+                query=query,
+                config_dir=config_dir,
+                input_json=input_json,
+            )
+            if root_span is not None:
+                root_span.update(output=result)
+
+            emit_event(EventType.TOKEN_DELTA, content=result)
+            emit_event(EventType.RUN_FINISHED, result=result[:500])
+            return result
     finally:
         clear_engine_config()
         if mcp_manager is not None:

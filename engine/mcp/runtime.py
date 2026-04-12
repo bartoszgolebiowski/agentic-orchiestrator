@@ -268,10 +268,11 @@ class McpManager:
     async def describe_tools(self, server_ids: Sequence[str]) -> list[ResolvedMcpTool]:
         seen_servers = list(dict.fromkeys(server_ids))
 
-        # Parallel discovery across all requested servers
-        discovery_results = await asyncio.gather(
-            *(self._get_runtime(sid).list_tools() for sid in seen_servers)
-        )
+        # Keep MCP discovery on one task so stdio session stacks are created and
+        # closed from the same async context.
+        discovery_results: list[list[ResolvedMcpTool]] = []
+        for server_id in seen_servers:
+            discovery_results.append(await self._get_runtime(server_id).list_tools())
 
         resolved: list[ResolvedMcpTool] = []
         for tools in discovery_results:

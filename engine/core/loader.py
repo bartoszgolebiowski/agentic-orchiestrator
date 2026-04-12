@@ -7,6 +7,7 @@ import yaml
 
 from engine.core.models import (
     EngineConfig,
+    EnricherConfig,
     NodeConfig,
     OrchestratorConfig,
     ToolDefinition,
@@ -93,12 +94,30 @@ def load_orchestrator_config(config_dir: Path) -> OrchestratorConfig:
     return OrchestratorConfig()
 
 
+def load_enricher_definitions(directory: Path) -> dict[str, EnricherConfig]:
+    enrichers: dict[str, EnricherConfig] = {}
+    if not directory.exists():
+        return enrichers
+    for file in sorted(directory.rglob("*.yaml")):
+        raw = _expand_env_values(_load_yaml(file))
+        if not isinstance(raw, dict) or "executor" not in raw:
+            continue
+        config = EnricherConfig(**raw)
+        if config.id in enrichers:
+            raise ValueError(
+                f"Duplicate enricher id '{config.id}' found in {file}"
+            )
+        enrichers[config.id] = config
+    return enrichers
+
+
 def load_engine_config(config_dir: Path) -> EngineConfig:
     orchestrator = load_orchestrator_config(config_dir)
     agents = load_nodes_from_dir(config_dir / "agents")
     subagents = load_nodes_from_dir(config_dir / "subagents")
     tools = load_tool_definitions(config_dir / "tools")
     mcps = load_mcp_definitions(config_dir / "mcps")
+    enrichers = load_enricher_definitions(config_dir / "enrichers")
 
     return EngineConfig(
         orchestrator=orchestrator,
@@ -106,4 +125,5 @@ def load_engine_config(config_dir: Path) -> EngineConfig:
         subagents=subagents,
         tools=tools,
         mcps=mcps,
+        enrichers=enrichers,
     )

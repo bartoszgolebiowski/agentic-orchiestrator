@@ -37,6 +37,31 @@ def validate_config_graph(config: EngineConfig) -> list[ConfigIssue]:
                 f"ID '{id_}' collides across namespaces: {', '.join(namespaces)}",
             ))
 
+    # 1b. Enricher ID collisions with other namespaces
+    for enricher_id in config.enrichers:
+        collisions = []
+        if enricher_id in config.agents:
+            collisions.append("agents")
+        if enricher_id in config.subagents:
+            collisions.append("subagents")
+        if enricher_id in config.tools:
+            collisions.append("tools")
+        if enricher_id in config.mcps:
+            collisions.append("mcps")
+        if collisions:
+            issues.append(ConfigIssue(
+                "error",
+                f"Enricher ID '{enricher_id}' collides with: {', '.join(collisions)}",
+            ))
+
+    # 1c. Disabled enrichers
+    for enricher_id, enricher in config.enrichers.items():
+        if not enricher.enabled:
+            issues.append(ConfigIssue(
+                "warning",
+                f"Enricher '{enricher_id}' is disabled",
+            ))
+
     # 2. Orphaned subagents (not referenced by any agent)
     referenced_subagents: set[str] = set()
     for agent in config.agents.values():
@@ -116,7 +141,11 @@ def build_dependency_tree(config: EngineConfig) -> str:
             for d_idx, (dep_kind, dep_id) in enumerate(all_deps):
                 is_last_dep = d_idx == len(all_deps) - 1
                 d_branch = "└── " if is_last_dep else "├── "
-                lines.append(f"{a_prefix}{s_prefix}{d_branch}{dep_kind}: {dep_id}")
+                suffix = ""
+                if dep_kind == "MCP" and dep_id in sub.mcp_include_tools:
+                    count = len(sub.mcp_include_tools[dep_id])
+                    suffix = f" (filtered: {count} tool{'s' if count != 1 else ''})"
+                lines.append(f"{a_prefix}{s_prefix}{d_branch}{dep_kind}: {dep_id}{suffix}")
 
     return "\n".join(lines)
 
@@ -139,6 +168,7 @@ def build_dependency_dict(config: EngineConfig) -> dict[str, Any]:
                 "description": sub.description,
                 "tools": sub.dependencies,
                 "mcp_servers": sub.mcp_dependencies,
+                "mcp_include_tools": sub.mcp_include_tools or None,
             }
         graph["orchestrator"][agent_id] = agent_entry
     return graph
