@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from engine.core.models import ToolParameter
+from engine.config.models import ToolParameter
 from engine.tools.registry import tool
 
 

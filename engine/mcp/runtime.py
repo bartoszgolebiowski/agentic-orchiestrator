@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import anyio
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Sequence
+from collections.abc import Awaitable, Callable
+from typing import Any, Sequence, TypeVar
 
 import httpx
 from mcp import ClientSession
@@ -22,6 +24,7 @@ from engine.mcp.models import (
 )
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -86,6 +89,50 @@ class McpServerRuntime:
         self._request_lock = asyncio.Lock()
         self._tools: list[ResolvedMcpTool] | None = None
 
+    def _session_is_open(self) -> bool:
+        session = self._session
+        if session is None or self._session_stack is None:
+            return False
+
+        try:
+            read_stats = session._read_stream.statistics()  # type: ignore[attr-defined]
+            write_stats = session._write_stream.statistics()  # type: ignore[attr-defined]
+        except Exception:
+            return False
+
+        return read_stats.open_receive_streams > 0 and write_stats.open_send_streams > 0
+
+    async def _close_session(self) -> None:
+        stack = self._session_stack
+        self._session_stack = None
+        self._session = None
+        self._tools = None
+
+        if stack is None:
+            return
+
+        try:
+            await stack.aclose()
+        except Exception:
+            logger.debug(
+                "Ignoring error while closing MCP session for '%s'",
+                self.config.id,
+                exc_info=True,
+            )
+
+    async def _run_with_reconnect(
+        self,
+        operation: Callable[[ClientSession], Awaitable[T]],
+    ) -> T:
+        session = await self._ensure_session()
+        try:
+            return await operation(session)
+        except (anyio.ClosedResourceError, anyio.BrokenResourceError, BrokenPipeError, ConnectionResetError):
+            logger.warning("MCP session for '%s' closed unexpectedly; reconnecting", self.config.id)
+            await self._close_session()
+            session = await self._ensure_session()
+            return await operation(session)
+
     async def _connect_stdio(self, connection: McpStdioConnectionConfig, stack: AsyncExitStack) -> ClientSession:
         server_parameters = StdioServerParameters(
             command=connection.command,
@@ -141,12 +188,15 @@ class McpServerRuntime:
             raise
 
     async def _ensure_session(self) -> ClientSession:
-        if self._session is not None:
+        if self._session is not None and self._session_stack is not None and self._session_is_open():
             return self._session
 
         async with self._session_lock:
-            if self._session is not None:
+            if self._session is not None and self._session_stack is not None and self._session_is_open():
                 return self._session
+
+            if self._session is not None or self._session_stack is not None:
+                await self._close_session()
 
             logger.info("Connecting to MCP server '%s'", self.config.id)
             stack, session = await self._connect()
@@ -155,21 +205,11 @@ class McpServerRuntime:
             return session
 
     async def list_tools(self) -> list[ResolvedMcpTool]:
-        if self._tools is not None:
-            return self._tools
-
-        session = await self._ensure_session()
-
         async with self._request_lock:
+            await self._ensure_session()
+
             if self._tools is not None:
                 return self._tools
-
-            discovered: list[ResolvedMcpTool] = []
-            discovered_remote_names: set[str] = set()
-            discovered_exposed_names: set[str] = set()
-            requested_tools = set(self.config.include_tools)
-            excluded_tools = set(self.config.exclude_tools)
-            cursor: str | None = None
 
             with observe(
                 name=f"mcp.list_tools:{self.config.id}",
@@ -177,47 +217,59 @@ class McpServerRuntime:
                 input={"server_id": self.config.id},
                 metadata={"component": "mcp", "server_id": self.config.id},
             ) as span:
-                while True:
-                    params = PaginatedRequestParams(cursor=cursor) if cursor else None
-                    result = await session.list_tools(params=params)
+                async def discover(active_session: ClientSession) -> list[ResolvedMcpTool]:
+                    discovered: list[ResolvedMcpTool] = []
+                    discovered_remote_names: set[str] = set()
+                    discovered_exposed_names: set[str] = set()
+                    requested_tools = set(self.config.include_tools)
+                    excluded_tools = set(self.config.exclude_tools)
+                    cursor: str | None = None
 
-                    for tool in result.tools:
-                        if requested_tools and tool.name not in requested_tools:
-                            continue
-                        if tool.name in excluded_tools:
-                            continue
+                    while True:
+                        params = PaginatedRequestParams(cursor=cursor) if cursor else None
+                        result = await active_session.list_tools(params=params)
 
-                        exposed_name = self.config.exposed_tool_name(tool.name)
-                        if exposed_name in discovered_exposed_names:
+                        for tool in result.tools:
+                            if requested_tools and tool.name not in requested_tools:
+                                continue
+                            if tool.name in excluded_tools:
+                                continue
+
+                            exposed_name = self.config.exposed_tool_name(tool.name)
+                            if exposed_name in discovered_exposed_names:
+                                raise ValueError(
+                                    f"MCP server '{self.config.id}' produced a duplicate exposed tool name '{exposed_name}'"
+                                )
+
+                            discovered.append(
+                                ResolvedMcpTool(
+                                    server_id=self.config.id,
+                                    remote_name=tool.name,
+                                    exposed_name=exposed_name,
+                                    description=tool.description or f"MCP tool '{tool.name}' from server '{self.config.id}'",
+                                    input_schema=tool.inputSchema,
+                                )
+                            )
+                            discovered_remote_names.add(tool.name)
+                            discovered_exposed_names.add(exposed_name)
+
+                        cursor = result.nextCursor
+                        if not cursor:
+                            break
+
+                    if requested_tools:
+                        missing = sorted(requested_tools - discovered_remote_names)
+                        if missing:
                             raise ValueError(
-                                f"MCP server '{self.config.id}' produced a duplicate exposed tool name '{exposed_name}'"
+                                f"MCP server '{self.config.id}' did not expose requested tools: {missing}"
                             )
 
-                        discovered.append(
-                            ResolvedMcpTool(
-                                server_id=self.config.id,
-                                remote_name=tool.name,
-                                exposed_name=exposed_name,
-                                description=tool.description or f"MCP tool '{tool.name}' from server '{self.config.id}'",
-                                input_schema=tool.inputSchema,
-                            )
-                        )
-                        discovered_remote_names.add(tool.name)
-                        discovered_exposed_names.add(exposed_name)
+                    if not discovered:
+                        raise ValueError(f"MCP server '{self.config.id}' did not expose any usable tools")
 
-                    cursor = result.nextCursor
-                    if not cursor:
-                        break
+                    return discovered
 
-                if requested_tools:
-                    missing = sorted(requested_tools - discovered_remote_names)
-                    if missing:
-                        raise ValueError(
-                            f"MCP server '{self.config.id}' did not expose requested tools: {missing}"
-                        )
-
-                if not discovered:
-                    raise ValueError(f"MCP server '{self.config.id}' did not expose any usable tools")
+                discovered = await self._run_with_reconnect(discover)
 
                 if span is not None:
                     span.update(output={"tool_count": len(discovered)})
@@ -231,8 +283,6 @@ class McpServerRuntime:
         if tool is None:
             raise KeyError(f"MCP tool '{exposed_name}' is not available on server '{self.config.id}'")
 
-        session = await self._ensure_session()
-
         async with self._request_lock:
             with observe(
                 name=f"mcp.call_tool:{exposed_name}",
@@ -240,19 +290,17 @@ class McpServerRuntime:
                 input={"server_id": self.config.id, "tool": exposed_name, "arguments": arguments},
                 metadata={"component": "mcp", "server_id": self.config.id, "tool": exposed_name},
             ) as span:
-                result = await session.call_tool(tool.remote_name, arguments=arguments)
-                result_text = serialize_call_tool_result(result)
+                async def invoke(active_session: ClientSession) -> str:
+                    result = await active_session.call_tool(tool.remote_name, arguments=arguments)
+                    return serialize_call_tool_result(result)
+
+                result_text = await self._run_with_reconnect(invoke)
                 if span is not None:
                     span.update(output=result_text)
                 return result_text
 
     async def aclose(self) -> None:
-        if self._session_stack is None:
-            return
-        await self._session_stack.aclose()
-        self._session_stack = None
-        self._session = None
-        self._tools = None
+        await self._close_session()
 
 
 class McpManager:
@@ -268,8 +316,8 @@ class McpManager:
     async def describe_tools(self, server_ids: Sequence[str]) -> list[ResolvedMcpTool]:
         seen_servers = list(dict.fromkeys(server_ids))
 
-        # Keep MCP discovery on one task so stdio session stacks are created and
-        # closed from the same async context.
+        # Keep MCP discovery serialized so reconnects and tool registration stay
+        # deterministic per server.
         discovery_results: list[list[ResolvedMcpTool]] = []
         for server_id in seen_servers:
             discovery_results.append(await self._get_runtime(server_id).list_tools())

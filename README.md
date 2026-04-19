@@ -91,6 +91,8 @@ uvicorn engine.server:app --reload --host 0.0.0.0 --port 8000
 
 Then open **http://localhost:8000**.
 
+In server mode, the app loads the `configs` tree once at startup, keeps the MCP manager alive for the lifetime of the process, and reconnects a dropped stdio session before the next tool call. The server-side config directory is fixed to `configs`.
+
 ### What You See
 
 | Panel | Content |

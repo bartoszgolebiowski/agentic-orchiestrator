@@ -94,3 +94,61 @@ async def test_main_keeps_enrichment_and_orchestrator_under_one_root_trace(monke
     assert ("handle", "Route this request", {"source_path": "documents/example.md"}) in state["events"]
     assert ("update", "agent-request", {"output": "final result"}) in state["events"]
     assert state["stack"] == []
+
+
+@pytest.mark.asyncio
+async def test_main_leaves_externally_owned_mcp_manager_open(monkeypatch):
+    state: dict[str, list[tuple[str, object]]] = {
+        "events": [],
+        "stack": [],
+    }
+
+    def fake_observe(**kwargs):
+        state["events"].append(("observe", kwargs["name"], kwargs["as_type"]))
+        return _DummySpan(state, kwargs["name"])
+
+    class DummyMcpManager:
+        async def warmup(self):
+            state["events"].append(("warmup",))
+
+        async def aclose(self):
+            state["events"].append(("aclose",))
+
+    class DummyOrchestrator:
+        def __init__(self, *args, **kwargs) -> None:
+            state["events"].append(("orchestrator-init",))
+
+        async def handle(self, query, input_json=None):
+            assert state["stack"] == ["agent-request", "agent-run"]
+            state["events"].append(("handle", query, input_json))
+            return "final result"
+
+    config = EngineConfig(
+        orchestrator=OrchestratorConfig(),
+        agents={},
+        subagents={},
+        tools={},
+        enrichers={},
+    )
+    manager = DummyMcpManager()
+
+    monkeypatch.setattr(main_module, "observe", fake_observe)
+    monkeypatch.setattr(main_module, "set_engine_config", lambda config: None)
+    monkeypatch.setattr(main_module, "clear_engine_config", lambda: None)
+    monkeypatch.setattr(main_module, "flush", lambda: None)
+    monkeypatch.setattr(main_module, "log_langfuse_connection_status", lambda: True)
+    monkeypatch.setattr(main_module, "get_raw_client", lambda: object())
+    monkeypatch.setattr(main_module, "Orchestrator", DummyOrchestrator)
+
+    result = await main_module.main(
+        "Route this request",
+        config_dir="configs",
+        engine_config=config,
+        mcp_manager=manager,
+        owns_mcp_manager=False,
+    )
+
+    assert result == "final result"
+    assert ("warmup",) not in state["events"]
+    assert ("aclose",) not in state["events"]
+    assert state["stack"] == []

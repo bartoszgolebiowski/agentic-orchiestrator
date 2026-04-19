@@ -19,6 +19,8 @@ from engine.core.runtime_state import clear_engine_config, set_engine_config
 from engine.core.tracing import observe, flush, log_langfuse_connection_status
 from engine.core.enrichment import apply_enrichment
 from engine.core.events import EventType, emit_event
+from engine.core.models import EngineConfig
+from engine.core.hitl import HitlCallback
 from engine.mcp.runtime import McpManager
 from engine.roles.orchestrator import Orchestrator
 
@@ -28,6 +30,20 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def build_mcp_manager(engine_config: EngineConfig) -> McpManager | None:
+    referenced_subagents = {
+        dependency
+        for agent in engine_config.agents.values()
+        for dependency in agent.dependencies
+    }
+    active_mcp_dependencies = any(
+        engine_config.subagents[sub_id].mcp_dependencies
+        for sub_id in referenced_subagents
+        if sub_id in engine_config.subagents
+    )
+    return McpManager(engine_config.mcps) if active_mcp_dependencies else None
 
 
 async def _run_orchestrator_query(
@@ -48,29 +64,47 @@ async def _run_orchestrator_query(
         return result
 
 
-async def main(query: str, config_dir: str = "configs", input_json: dict[str, Any] | None = None) -> str:
+async def main(
+    query: str,
+    config_dir: str = "configs",
+    input_json: dict[str, Any] | None = None,
+    hitl_callback: HitlCallback | None = None,
+    *,
+    engine_config: EngineConfig | None = None,
+    mcp_manager: McpManager | None = None,
+    owns_mcp_manager: bool | None = None,
+) -> str:
     load_dotenv()
     log_langfuse_connection_status()
 
     emit_event(EventType.RUN_STARTED, query=query, config_dir=config_dir)
 
     config_path = Path(config_dir)
-    engine_config = load_engine_config(config_path)
+    if engine_config is None:
+        engine_config = load_engine_config(config_path)
 
-    # Config graph validation at startup
-    issues = validate_config_graph(engine_config)
-    for issue in issues:
-        if issue.level == "error":
-            logger.error("Config graph error: %s", issue.message)
-        else:
-            logger.warning("Config graph warning: %s", issue.message)
-    errors = [i for i in issues if i.level == "error"]
-    if errors:
-        raise ValueError(
-            f"Config graph has {len(errors)} error(s); fix them before running the orchestrator"
-        )
+        # Config graph validation at startup
+        issues = validate_config_graph(engine_config)
+        for issue in issues:
+            if issue.level == "error":
+                logger.error("Config graph error: %s", issue.message)
+            else:
+                logger.warning("Config graph warning: %s", issue.message)
+        errors = [i for i in issues if i.level == "error"]
+        if errors:
+            raise ValueError(
+                f"Config graph has {len(errors)} error(s); fix them before running the orchestrator"
+            )
 
     set_engine_config(engine_config)
+
+    if owns_mcp_manager is None:
+        owns_mcp_manager = mcp_manager is None
+
+    if mcp_manager is None:
+        mcp_manager = build_mcp_manager(engine_config)
+        if mcp_manager is not None:
+            owns_mcp_manager = True
 
     logger.info(
         f"Loaded {len(engine_config.agents)} agents, "
@@ -81,26 +115,15 @@ async def main(query: str, config_dir: str = "configs", input_json: dict[str, An
     )
 
     client = get_raw_client()
-    referenced_subagents = {
-        dependency
-        for agent in engine_config.agents.values()
-        for dependency in agent.dependencies
-    }
-    active_mcp_dependencies = any(
-        engine_config.subagents[sub_id].mcp_dependencies
-        for sub_id in referenced_subagents
-        if sub_id in engine_config.subagents
-    )
-    mcp_manager = McpManager(engine_config.mcps) if active_mcp_dependencies else None
-
     try:
-        if mcp_manager is not None:
+        if owns_mcp_manager and mcp_manager is not None:
             await mcp_manager.warmup()
 
         orchestrator = Orchestrator(
             engine_config=engine_config,
             client=client,
             mcp_manager=mcp_manager,
+            hitl_callback=hitl_callback,
         )
 
         run_id = uuid4().hex
@@ -172,7 +195,7 @@ async def main(query: str, config_dir: str = "configs", input_json: dict[str, An
             return result
     finally:
         clear_engine_config()
-        if mcp_manager is not None:
+        if owns_mcp_manager and mcp_manager is not None:
             await mcp_manager.aclose()
         flush()
 

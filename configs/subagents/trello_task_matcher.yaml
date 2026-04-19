@@ -46,4 +46,89 @@ mcp_include_tools:
     - get_lists
     - get_cards_by_list_id
     - get_my_cards
+mcp_skip_hitl_tools:
+  trello:
+    - list_boards
+    - list_workspaces
+    - list_boards_in_workspace
+    - set_active_board
+    - set_active_workspace
+    - get_active_board_info
+    - get_lists
+    - get_cards_by_list_id
+    - get_my_cards
+tool_result_projection:
+  trello__list_boards:
+    id: $.id
+    name:
+      - $.name
+      - $.displayName
+    desc: $.desc
+    url: $.url
+    closed: $.closed
+  trello__list_workspaces:
+    id: $.id
+    name:
+      - $.displayName
+      - $.name
+    desc: $.desc
+    url: $.url
+    closed: $.closed
+  trello__list_boards_in_workspace:
+    id: $.id
+    name:
+      - $.name
+      - $.displayName
+    desc: $.desc
+    url: $.url
+    closed: $.closed
+  trello__set_active_board:
+    id: $.id
+    name:
+      - $.name
+      - $.displayName
+    desc: $.desc
+    url: $.url
+    closed: $.closed
+  trello__set_active_workspace:
+    id: $.id
+    name:
+      - $.displayName
+      - $.name
+    desc: $.desc
+    url: $.url
+    closed: $.closed
+  trello__get_active_board_info:
+    id: $.id
+    name:
+      - $.name
+      - $.displayName
+    desc: $.desc
+    url: $.url
+    closed: $.closed
+  trello__get_lists:
+    id: $.id
+    name: $.name
+    closed: $.closed
+    pos: $.pos
+  trello__get_cards_by_list_id:
+    id: $.id
+    name: $.name
+    desc: $.desc
+    due: $.due
+    dueComplete: $.dueComplete
+    idList: $.idList
+    labels: $.labels[*].name
+    url: $.url
+    shortUrl: $.shortUrl
+  trello__get_my_cards:
+    id: $.id
+    name: $.name
+    desc: $.desc
+    due: $.due
+    dueComplete: $.dueComplete
+    idList: $.idList
+    labels: $.labels[*].name
+    url: $.url
+    shortUrl: $.shortUrl
 max_steps: 15

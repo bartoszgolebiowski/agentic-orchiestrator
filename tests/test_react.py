@@ -42,7 +42,7 @@ async def test_react_loop_retries_empty_final_answer(monkeypatch):
         max_steps=3,
     )
 
-    monkeypatch.setattr("engine.core.react.chat_completion", fake_chat_completion)
+    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
 
     result = await loop.run("extract markdown")
 

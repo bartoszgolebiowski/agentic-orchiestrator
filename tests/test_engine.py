@@ -7,8 +7,8 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from engine.core.loader import load_engine_config
-import engine.core.llm as llm
-import engine.core.tracing as tracing
+import engine.llm.client as llm
+import engine.llm.tracing as tracing
 from engine.core.models import (
     AgentReActStep,
     AgentReActStepOutput,

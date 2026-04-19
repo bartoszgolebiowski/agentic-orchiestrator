@@ -6,7 +6,7 @@ from pathlib import Path
 from textwrap import indent
 from typing import Any
 
-from engine.core.models import ToolParameter
+from engine.config.models import ToolParameter
 from engine.tools.registry import tool
 
 

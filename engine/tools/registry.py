@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Awaitable
 
-from engine.core.models import ToolParameter
+from engine.config.models import ToolParameter
 
 
 ToolCallable = Callable[..., Awaitable[str]]

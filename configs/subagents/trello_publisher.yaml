@@ -16,4 +16,63 @@ mcp_include_tools:
     - add_card_to_list
     - add_checklist_item
     - get_checklist_by_name
+mcp_skip_hitl_tools:
+  trello:
+    - list_boards
+    - set_active_board
+    - get_lists
+    - add_checklist_item
+    - get_checklist_by_name
+tool_result_projection:
+  trello__list_boards:
+    id: $.id
+    name:
+      - $.name
+      - $.displayName
+    desc: $.desc
+    url: $.url
+    closed: $.closed
+  trello__set_active_board:
+    id: $.id
+    name:
+      - $.name
+      - $.displayName
+    desc: $.desc
+    url: $.url
+    closed: $.closed
+  trello__get_lists:
+    id: $.id
+    name: $.name
+    closed: $.closed
+    pos: $.pos
+  trello__add_card_to_list:
+    id: $.id
+    name: $.name
+    desc: $.desc
+    due: $.due
+    dueComplete: $.dueComplete
+    idList: $.idList
+    labels: $.labels[*].name
+    url: $.url
+    shortUrl: $.shortUrl
+  trello__add_checklist_item:
+    id: $.id
+    text:
+      - $.text
+      - $.name
+    state: $.state
+  trello__get_checklist_by_name:
+    id: $.id
+    name:
+      - $.name
+      - $.text
+    percentComplete: $.percentComplete
+    checkItems:
+      path: $.checkItems[*]
+      fields:
+        id: $.id
+        text:
+          - $.text
+          - $.name
+        state: $.state
 max_steps: 20

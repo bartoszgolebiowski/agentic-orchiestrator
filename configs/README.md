@@ -237,6 +237,76 @@ What this means:
 - The subagent is allowed to call only those declared capabilities.
 - The runtime resolves tool calls through the correct registry or MCP transport.
 
+### Controlling HITL for MCP Tools
+
+By default every MCP tool call pauses for human-in-the-loop confirmation when an HITL callback is active. If some tools are read-only and safe to run without confirmation, list them in `mcp_skip_hitl_tools`:
+
+```yaml
+id: trello_publisher
+role_type: subagent
+description: Publishes plans to Trello.
+system_prompt: >
+  You are a Trello publisher.
+mcp_dependencies:
+  - trello
+mcp_include_tools:
+  trello:
+    - list_boards
+    - set_active_board
+    - get_lists
+    - add_card_to_list
+mcp_skip_hitl_tools:
+  trello:
+    - list_boards
+    - set_active_board
+    - get_lists
+max_steps: 20
+```
+
+Rules:
+
+- `mcp_skip_hitl_tools` maps MCP server ID → list of remote tool names that may skip HITL.
+- Tools **not listed** still require human confirmation when a callback is configured.
+- If `mcp_skip_hitl_tools` is absent or empty, **all** MCP tools require HITL (safe default).
+- Keys must reference servers declared in `mcp_dependencies`.
+- Tool names must match tools actually exposed by that server (after `mcp_include_tools` filtering).
+- Only subagents may use this field; agents cannot.
+
+### Shaping Tool Results
+
+Subagents can also shrink tool outputs before they are passed back into the ReAct loop with `tool_result_projection`. This is a subagent-only concern; it does not change the MCP server itself.
+
+Projection values can be:
+
+- a JSONPath string for a single extracted value
+- a field map for a compact JSON object
+- a nested collection spec with `path` and `fields`
+
+Example:
+
+```yaml
+tool_result_projection:
+  trello__add_card_to_list:
+    id: $.id
+    name: $.name
+    labels: $.labels[*].name
+  trello__get_checklist_by_name:
+    id: $.id
+    name:
+      - $.name
+      - $.text
+    checkItems:
+      path: $.checkItems[*]
+      fields:
+        id: $.id
+        text:
+          - $.text
+          - $.name
+        state: $.state
+```
+
+If a selector misses or the payload shape is unexpected, the raw response is passed through unchanged.
+
 ## Tool Example
 
 Local tools are simple async Python functions registered in code and described in YAML:
