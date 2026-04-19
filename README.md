@@ -16,6 +16,7 @@ docker compose -f docker-compose.langfuse.yml up -d
 
 - `OPENAI_API_KEY`: required for LLM access.
 - `OPENAI_BASE_URL`: optional OpenAI-compatible API endpoint.
+- `LLM_REASONING_EFFORT`: optional reasoning level (`low`, `medium`, `high`, `xhigh`) when the provider supports `reasoning_effort`.
 - `LANGFUSE_PUBLIC_KEY`: public project key for tracing.
 - `LANGFUSE_SECRET_KEY`: secret project key for tracing.
 - `LANGFUSE_BASE_URL`: base URL for the local or hosted Langfuse instance.

@@ -360,6 +360,11 @@
   let running = false;
   let assistantEl = null;
   let currentSessionId = null;
+  let activeHitlDialog = null;
+  let activeHitlKey = null;
+  let sessionAutoApproved = false;
+  const hitlQueue = [];
+  const queuedHitlKeys = new Set();
 
   function setStatus(text, cls) {
     statusEl.textContent = text;
@@ -484,7 +489,18 @@
   }
 
   /* ── HITL confirmation UI ── */
-  function showHitlDialog(evt) {
+  function hitlEventKey(evt) {
+    const d = evt.data || {};
+    if (d.tool_call_id) return String(d.tool_call_id);
+    return JSON.stringify({ tool: d.tool || '', source: d.source || '', arguments: d.arguments || {} });
+  }
+
+  function openNextHitlDialog() {
+    if (activeHitlDialog || hitlQueue.length === 0) return;
+
+    const queued = hitlQueue.shift();
+    const evt = queued.evt;
+    const key = queued.key;
     const d = evt.data || {};
     finalizeAssistant(); // close any open assistant bubble
 
@@ -501,6 +517,8 @@
       `</div>`;
 
     messagesEl.appendChild(dialog);
+    activeHitlDialog = dialog;
+    activeHitlKey = key;
     scrollBottom(messagesEl);
 
     const approveBtn = dialog.querySelector('.hitl-approve');
@@ -529,13 +547,32 @@
         resolved.className = 'hitl-resolved ' + (approved ? 'approved' : 'rejected');
         if (approved && approvalScope === 'session') {
           resolved.textContent = '\u2713 Approved for session';
+          sessionAutoApproved = true;
+          hitlQueue.length = 0;
+          queuedHitlKeys.clear();
         } else {
           resolved.textContent = approved ? '\u2713 Approved once' : '\u2717 Rejected';
+          queuedHitlKeys.delete(key);
         }
         dialog.appendChild(resolved);
+        if (approved && approvalScope === 'session') {
+          queuedHitlKeys.delete(key);
+        }
+        activeHitlDialog = null;
+        activeHitlKey = null;
+        openNextHitlDialog();
         setStatus('Running...', 'running');
       } catch (err) {
-        actionsEl.innerHTML = `<span style="color:var(--red)">Failed to submit: ${escapeHtml(err.message)}</span>`;
+        let errorEl = dialog.querySelector('.hitl-error');
+        if (!errorEl) {
+          errorEl = document.createElement('div');
+          errorEl.className = 'hitl-error';
+          dialog.appendChild(errorEl);
+        }
+        errorEl.innerHTML = `<span style="color:var(--red)">Failed to submit: ${escapeHtml(err.message)}</span>`;
+        approveBtn.disabled = false;
+        approveSessionBtn.disabled = false;
+        rejectBtn.disabled = false;
       }
     }
 
@@ -546,6 +583,15 @@
     setStatus('Waiting for confirmation...', 'running');
   }
 
+  function showHitlDialog(evt) {
+    if (sessionAutoApproved) return;
+    const key = hitlEventKey(evt);
+    if (queuedHitlKeys.has(key)) return;
+    queuedHitlKeys.add(key);
+    hitlQueue.push({ evt, key });
+    openNextHitlDialog();
+  }
+
   /* ── Send & stream ── */
   async function send() {
     const query = promptInput.value.trim();
@@ -553,6 +599,11 @@
     running = true;
     sendBtn.disabled = true;
     promptInput.value = '';
+    activeHitlDialog = null;
+    activeHitlKey = null;
+    sessionAutoApproved = false;
+    hitlQueue.length = 0;
+    queuedHitlKeys.clear();
 
     addUserMessage(query);
     setStatus('Running...', 'running');

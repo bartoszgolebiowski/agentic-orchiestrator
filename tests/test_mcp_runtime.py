@@ -8,7 +8,7 @@ import anyio
 
 import pytest
 
-from engine.mcp.runtime import McpManager, McpServerRuntime, ResolvedMcpTool, build_openai_mcp_tool_spec
+from engine.mcp.runtime import McpManager, McpServerRuntime, ResolvedMcpTool, build_openai_mcp_tool_spec, serialize_call_tool_result
 from engine.mcp.models import McpHttpConnectionConfig, McpServerConfig
 from engine.core.events import EventType
 from engine.core.models import NodeConfig, RoleType
@@ -118,6 +118,29 @@ class _ReconnectableSession:
         )
 
 
+class _FailingRuntime:
+    def __init__(self, server_id: str, *, error_message: str) -> None:
+        self.server_id = server_id
+        self.error_message = error_message
+
+    async def list_tools(self) -> list[ResolvedMcpTool]:
+        return [
+            ResolvedMcpTool(
+                server_id=self.server_id,
+                remote_name="echo",
+                exposed_name=f"{self.server_id}__echo",
+                description="echo tool",
+                input_schema={"type": "object", "properties": {}},
+            )
+        ]
+
+    async def call_tool(self, exposed_name: str, arguments: dict[str, object]) -> str:
+        raise ValueError(self.error_message)
+
+    async def aclose(self) -> None:
+        return None
+
+
 def _make_runtime(server_id: str = "srv") -> tuple[McpServerRuntime, McpServerConfig]:
     config = McpServerConfig(
         id=server_id,
@@ -216,6 +239,38 @@ async def test_mcp_call_tool_retries_after_broken_resource_error() -> None:
     assert first_session.call_tool_calls == 1
     assert second_session.call_tool_calls == 1
     assert connect_calls == 1
+
+
+def test_serialize_call_tool_result_wraps_error_payload() -> None:
+    result = SimpleNamespace(
+        structuredContent=None,
+        content=[SimpleNamespace(type="text", text="validation failed")],
+        isError=True,
+    )
+
+    payload = json.loads(serialize_call_tool_result(result))
+
+    assert payload == {"hint": "validation failed", "status": "error"}
+
+
+@pytest.mark.asyncio
+async def test_mcp_manager_call_tool_returns_error_json_on_runtime_failure() -> None:
+    manager = McpManager({})
+    runtime = _FailingRuntime("srv", error_message="board not selected")
+    manager._runtimes = {"srv": runtime}  # type: ignore[dict-item]
+    manager._tool_index = {
+        "srv__echo": ResolvedMcpTool(
+            server_id="srv",
+            remote_name="echo",
+            exposed_name="srv__echo",
+            description="echo tool",
+            input_schema={"type": "object", "properties": {}},
+        )
+    }  # type: ignore[attr-defined]
+
+    payload = json.loads(await manager.call_tool("srv__echo", {"value": 1}))
+
+    assert payload == {"hint": "board not selected", "status": "error"}
 
 
 # ─── mcp_include_tools filtering ───
@@ -790,3 +845,74 @@ async def test_subagent_execute_fails_closed_when_projection_cannot_apply(monkey
     assert "SENSITIVE-" not in observation
     assert "unexpected" not in observation
     assert verbose_raw_result not in json.dumps(captured_threads[1], ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_subagent_execute_preserves_mcp_error_json(monkeypatch) -> None:
+    error_result = json.dumps(
+        {"status": "error", "hint": "board not selected"},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    mcp_manager = _DummyMcpManager(call_results=[error_result])
+
+    sub_config = NodeConfig(
+        id="trello_publisher_test",
+        role_type=RoleType.SUBAGENT,
+        description="test",
+        system_prompt="test",
+        mcp_dependencies=["trello"],
+        mcp_include_tools={"trello": ["add_card_to_list"]},
+        tool_result_projection={
+            "trello__add_card_to_list": {
+                "id": "$.id",
+                "name": "$.name",
+                "desc": "$.desc",
+                "due": "$.due",
+                "dueComplete": "$.dueComplete",
+                "idList": "$.idList",
+                "labels": "$.labels[*].name",
+                "url": "$.url",
+                "shortUrl": "$.shortUrl",
+            }
+        },
+        max_steps=3,
+    )
+    executor = SubagentExecutor(
+        config=sub_config,
+        engine_config=_make_engine_config(),
+        client=SimpleNamespace(),
+        mcp_manager=mcp_manager,
+    )
+
+    captured_threads: list[list[dict[str, object]]] = []
+    responses = [
+        _DummyAssistantMessage(
+            content="Need to create a card",
+            tool_calls=[
+                _tool_call(
+                    call_id="call_1",
+                    name="trello__add_card_to_list",
+                    arguments={"listId": "list-1", "name": "Implement login"},
+                )
+            ],
+        ),
+        _DummyAssistantMessage(content='{"status":"ok"}'),
+    ]
+
+    async def fake_chat_completion(*, client, messages, tools, model, trace_name, trace_metadata, temperature=0.0):
+        captured_threads.append(_snapshot_messages(messages))
+        return responses.pop(0)
+
+    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
+
+    result = await executor.execute("publish", input_json={"plan": "demo"})
+
+    assert result == '{"status":"ok"}'
+    assert len(captured_threads) == 2
+
+    second_turn_tool_messages = [m for m in captured_threads[1] if m.get("role") == "tool"]
+    assert len(second_turn_tool_messages) == 1
+    observation = json.loads(str(second_turn_tool_messages[0]["content"]))
+
+    assert observation == {"hint": "board not selected", "status": "error"}

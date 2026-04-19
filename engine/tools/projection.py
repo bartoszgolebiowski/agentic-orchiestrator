@@ -6,6 +6,8 @@ Projection specs are intentionally small and declarative:
   list value.
 - A mapping is treated as a field map that builds a smaller JSON object.
 - A mapping with ``path`` and ``fields`` projects a nested collection.
+- Standard error envelopes of the form ``{"status": "error", "hint": ...}``
+    are preserved unchanged so failure details remain visible to the LLM.
 
 If projection fails or the raw value is not valid JSON, the original string is
 returned unchanged.
@@ -80,6 +82,10 @@ def _project_spec(data: Any, spec: Any) -> Any | None:
         return _project_field_map(data, spec)
 
     return None
+
+
+def _is_error_envelope(data: Any) -> bool:
+    return isinstance(data, Mapping) and data.get("status") == "error"
 
 
 def _project_field_map(data: Any, field_map: Mapping[str, Any]) -> Any | None:
@@ -196,6 +202,9 @@ def project_tool_result(raw: str, projection: ProjectionSpec) -> str:
     except (json.JSONDecodeError, TypeError):
         return raw
 
+    if _is_error_envelope(data):
+        return raw
+
     try:
         projected = _project_spec(data, projection)
     except (JsonPathParserError, Exception):
@@ -213,12 +222,16 @@ def project_tool_result_strict(raw: str, projection: ProjectionSpec) -> str:
 
     This variant is for LLM-facing tool responses. It never falls back to the
     original raw payload, because that would leak verbose tool output back into
-    the ReAct loop.
+    the ReAct loop. Standard error envelopes are preserved unchanged so failure
+    details can still reach the next turn.
     """
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, TypeError) as exc:
         raise ValueError("Configured tool projection requires JSON output") from exc
+
+    if _is_error_envelope(data):
+        return raw
 
     try:
         projected = _project_spec(data, projection)

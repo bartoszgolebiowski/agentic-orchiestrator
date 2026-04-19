@@ -61,6 +61,18 @@ def _format_content_block(content_block: Any) -> str:
     return str(content_block)
 
 
+def _serialize_error_response(message: str) -> str:
+    return json.dumps({"status": "error", "hint": message}, ensure_ascii=False, indent=2)
+
+
+def _format_error_hint(exc: Exception) -> str:
+    if isinstance(exc, KeyError) and exc.args:
+        message = str(exc.args[0]).strip()
+    else:
+        message = str(exc).strip()
+    return message or type(exc).__name__
+
+
 def serialize_call_tool_result(result: CallToolResult) -> str:
     parts: list[str] = []
 
@@ -74,9 +86,7 @@ def serialize_call_tool_result(result: CallToolResult) -> str:
 
     result_text = "\n".join(parts).strip()
     if result.isError:
-        if result_text:
-            return f"ERROR: {result_text}"
-        return "ERROR: MCP tool call failed"
+        return _serialize_error_response(result_text or "MCP tool call failed")
     return result_text
 
 
@@ -336,16 +346,20 @@ class McpManager:
         return resolved
 
     async def call_tool(self, exposed_name: str, arguments: dict[str, Any]) -> str:
-        tool = self._tool_index.get(exposed_name)
-        if tool is None:
-            await self.warmup()
+        try:
             tool = self._tool_index.get(exposed_name)
+            if tool is None:
+                await self.warmup()
+                tool = self._tool_index.get(exposed_name)
 
-        if tool is None:
-            raise KeyError(f"MCP tool '{exposed_name}' is not registered")
+            if tool is None:
+                raise KeyError(f"MCP tool '{exposed_name}' is not registered")
 
-        runtime = self._get_runtime(tool.server_id)
-        return await runtime.call_tool(exposed_name, arguments)
+            runtime = self._get_runtime(tool.server_id)
+            return await runtime.call_tool(exposed_name, arguments)
+        except Exception as exc:
+            logger.warning("MCP tool call failed for '%s'", exposed_name, exc_info=True)
+            return _serialize_error_response(_format_error_hint(exc))
 
     async def warmup(self) -> None:
         if not self._runtimes:

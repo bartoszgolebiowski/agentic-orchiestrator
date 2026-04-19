@@ -57,6 +57,14 @@ class TestPipelineState:
         assert result is not None
         assert result.status == StageStatus.FAILED
 
+    def test_observe_result_failure_json_envelope(self):
+        pipeline = PipelineState(["a", "b"])
+        pipeline.observe_result("a", '{"status": "error", "hint": "something broke"}')
+        assert not pipeline.is_stage_completed("a")
+        result = pipeline.get_result("a")
+        assert result is not None
+        assert result.status == StageStatus.FAILED
+
     @pytest.mark.parametrize("observation", ["", "   ", "\n\t"])
     def test_observe_result_rejects_blank_observation(self, observation):
         pipeline = PipelineState(["a"])
@@ -95,6 +103,7 @@ class TestIsFailureObservation:
         "I cannot complete the request",
         "Could not find the file",
         "Failed to execute tool",
+        '{"status": "error", "hint": "tool failed"}',
     ])
     def test_detects_failures(self, text):
         assert is_failure_observation(text) is True

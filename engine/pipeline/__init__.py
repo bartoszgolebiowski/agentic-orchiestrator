@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
@@ -128,7 +129,17 @@ class PipelineState:
 
 
 def is_failure_observation(observation: str) -> bool:
-    if not observation.strip():
+    stripped = observation.strip()
+    if not stripped:
         return True
-    lower = observation.lower()
+
+    try:
+        parsed = json.loads(stripped)
+    except Exception:
+        parsed = None
+
+    if isinstance(parsed, dict) and parsed.get("status") == "error":
+        return True
+
+    lower = stripped.lower()
     return any(lower.startswith(prefix) for prefix in _FAILURE_PREFIXES)

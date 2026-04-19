@@ -195,3 +195,65 @@ async def test_register_session_with_session_scope_auto_approves_immediately(man
     assert result.approved is True
     assert result.approval_scope == HitlApprovalScope.SESSION
     assert pause_calls == []
+
+
+@pytest.mark.asyncio
+async def test_callback_serializes_pending_requests(manager):
+    session_id = "test-session-8"
+    manager.register_session(session_id)
+
+    pause_calls: list[PendingToolCall] = []
+    first_pause = asyncio.Event()
+    second_pause = asyncio.Event()
+
+    async def _on_pause(pending: PendingToolCall):
+        pause_calls.append(pending)
+        if len(pause_calls) == 1:
+            first_pause.set()
+        if len(pause_calls) == 2:
+            second_pause.set()
+
+    callback = manager.build_callback(session_id, on_pause=_on_pause)
+
+    first_pending = PendingToolCall(
+        tool_name="trello_update",
+        arguments={"id": "A1"},
+        tool_call_id="tc-8a",
+        source="mcp",
+    )
+    second_pending = PendingToolCall(
+        tool_name="trello_update",
+        arguments={"id": "A2"},
+        tool_call_id="tc-8b",
+        source="mcp",
+    )
+
+    first_task = asyncio.create_task(callback(first_pending))
+    await asyncio.wait_for(first_pause.wait(), timeout=0.2)
+
+    second_task = asyncio.create_task(callback(second_pending))
+    await asyncio.sleep(0.05)
+    assert len(pause_calls) == 1
+
+    await manager.submit_response(session_id, HitlResponse(approved=True))
+    first_result = await asyncio.wait_for(first_task, timeout=0.2)
+    assert first_result.approved is True
+
+    await asyncio.wait_for(second_pause.wait(), timeout=0.2)
+    await manager.submit_response(session_id, HitlResponse(approved=True))
+    second_result = await asyncio.wait_for(second_task, timeout=0.2)
+    assert second_result.approved is True
+    assert len(pause_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_submit_response_rejects_duplicate_queue_entries(manager):
+    session_id = "test-session-9"
+    manager.register_session(session_id)
+
+    await manager.submit_response(session_id, HitlResponse(approved=True))
+    with pytest.raises(ValueError, match="already queued"):
+        await manager.submit_response(session_id, HitlResponse(approved=False))
+
+    queued = await asyncio.wait_for(manager.wait_for_human(session_id), timeout=0.05)
+    assert queued.approved is True

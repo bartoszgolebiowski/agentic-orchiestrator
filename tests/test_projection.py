@@ -62,6 +62,13 @@ class TestStrictProjectSelector:
         with pytest.raises(ValueError, match="produced no result"):
             project_tool_result_strict(raw, {"id": "$.id"})
 
+    def test_preserves_error_envelope(self) -> None:
+        raw = _json({"status": "error", "hint": "board not selected"})
+
+        result = project_tool_result_strict(raw, {"id": "$.id"})
+
+        assert result == raw
+
 
 class TestProjectFieldMap:
     def test_card_subset_projection(self) -> None:

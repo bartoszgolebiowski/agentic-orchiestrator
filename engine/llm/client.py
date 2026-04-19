@@ -49,6 +49,18 @@ def get_model() -> str:
     return os.environ.get("LLM_MODEL", "gpt-4o")
 
 
+def get_reasoning_effort(default: str | None = None) -> str | None:
+    value = (
+        os.environ.get("LLM_REASONING_EFFORT")
+        or os.environ.get("OPENAI_REASONING_EFFORT")
+        or os.environ.get("REASONING_EFFORT")
+    )
+    if value is None:
+        return default
+    effort = value.strip().lower()
+    return effort or default
+
+
 def _model_dump(value: Any) -> Any:
     if value is None:
         return None
@@ -332,6 +344,18 @@ async def chat_completion(
         "messages": messages,
         "temperature": temperature,
     }
+    supports_reasoning = False
+    reasoning_effort = get_reasoning_effort()
+    if reasoning_effort:
+        try:
+            supports_reasoning = "reasoning_effort" in inspect.signature(
+                client.chat.completions.create
+            ).parameters
+        except (ValueError, TypeError, AttributeError):
+            supports_reasoning = False
+    if supports_reasoning and reasoning_effort:
+        kwargs["reasoning_effort"] = reasoning_effort
+
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
@@ -390,6 +414,7 @@ async def structured_completion(
         model=model_name,
         metadata=trace_metadata,
     ) as generation:
+        reasoning_effort = get_reasoning_effort(default="medium")
         supports_reasoning_parse = False
         supports_reasoning_create = False
         try:
@@ -410,8 +435,8 @@ async def structured_completion(
             "model": model_name,
             "temperature": temperature,
         }
-        if supports_reasoning_parse:
-            parse_kwargs["reasoning_effort"] = "xhigh"
+        if supports_reasoning_parse and reasoning_effort:
+            parse_kwargs["reasoning_effort"] = reasoning_effort
 
         if api_kind == "responses":
             parse_kwargs["input"] = messages
@@ -441,8 +466,8 @@ async def structured_completion(
                 "model": model_name,
                 "temperature": temperature,
             }
-            if supports_reasoning_create:
-                create_kwargs["reasoning_effort"] = "xhigh"
+            if supports_reasoning_create and reasoning_effort:
+                create_kwargs["reasoning_effort"] = reasoning_effort
             if api_kind == "responses":
                 create_kwargs["input"] = messages
                 create_kwargs["text"] = {"format": {"type": "json_object"}}

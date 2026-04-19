@@ -207,7 +207,10 @@ async def submit_hitl_response(session_id: str, request: HitlResponseRequest) ->
     session.status = SessionStatus.RUNNING
     session.pending_tool_call = None
     await repository.update(session)
-    await hitl_manager.submit_response(session_id, response)
+    try:
+        await hitl_manager.submit_response(session_id, response)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return {"status": "ok", "session_id": session_id}
 
