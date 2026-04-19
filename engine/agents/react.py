@@ -10,7 +10,13 @@ from pydantic import BaseModel
 
 from engine.config.contracts import normalize_handoff_payload, validate_model_payload
 from engine.events import EventType, emit_event
-from engine.llm.client import chat_completion, structured_completion
+from engine.llm.client import (
+    chat_completion,
+    get_last_usage_details,
+    merge_usage_summaries,
+    structured_completion,
+    summarize_usage,
+)
 from engine.config.models import AgentReActStep, AgentReActStepOutput
 from engine.pipeline import PipelineState, is_failure_observation
 
@@ -34,6 +40,8 @@ class StepResult:
     observation: str | None
     is_final: bool = False
     final_answer: str | None = None
+    llm_usage: dict[str, int] | None = None
+    llm_usage_details: dict[str, Any] | None = None
 
 
 ActionHandler = Callable[[str, dict[str, Any]], Awaitable[str]]
@@ -116,6 +124,8 @@ class ReActLoop:
                 trace_name=f"subagent-step-{step_num}",
                 trace_metadata={"loop": "react", "step": step_num, "max_steps": self.max_steps},
             )
+            llm_usage_details = get_last_usage_details()
+            llm_usage = summarize_usage(llm_usage_details)
 
             if response.tool_calls:
                 self._messages.append(response.model_dump())
@@ -134,6 +144,8 @@ class ReActLoop:
                         step=step_num,
                         action=fn_name,
                         arguments=fn_args,
+                        llm_usage=llm_usage,
+                        llm_usage_details=llm_usage_details,
                     )
 
                     try:
@@ -154,6 +166,8 @@ class ReActLoop:
                         thought=response.content,
                         action=Action(name=fn_name, arguments=fn_args),
                         observation=observation,
+                        llm_usage=llm_usage,
+                        llm_usage_details=llm_usage_details,
                     ))
             else:
                 final_answer = response.content or ""
@@ -170,6 +184,15 @@ class ReActLoop:
                     continue
                 logger.info(f"  Final answer: {final_answer[:200]}")
                 self._messages.append(response.model_dump())
+                emit_event(
+                    EventType.SUBAGENT_STEP,
+                    step=step_num,
+                    action=None,
+                    arguments={},
+                    is_final=True,
+                    llm_usage=llm_usage,
+                    llm_usage_details=llm_usage_details,
+                )
 
                 if self.final_response_model is not None:
                     try:
@@ -186,6 +209,8 @@ class ReActLoop:
                             observation=None,
                             is_final=True,
                             final_answer=normalized,
+                            llm_usage=llm_usage,
+                            llm_usage_details=llm_usage_details,
                         ))
                         return normalized
                     except Exception:
@@ -207,6 +232,11 @@ class ReActLoop:
                                 "final_output": self.final_response_model.__name__,
                             },
                         )
+                        final_usage_details = get_last_usage_details()
+                        final_usage = summarize_usage(final_usage_details)
+                        llm_usage = merge_usage_summaries(llm_usage, final_usage)
+                        if final_usage_details is not None:
+                            llm_usage_details = final_usage_details
                         normalized = json.dumps(
                             final_output.model_dump(mode="json"),
                             ensure_ascii=False,
@@ -219,6 +249,8 @@ class ReActLoop:
                             observation=None,
                             is_final=True,
                             final_answer=normalized,
+                            llm_usage=llm_usage,
+                            llm_usage_details=llm_usage_details,
                         ))
                         return normalized
 
@@ -228,6 +260,8 @@ class ReActLoop:
                     observation=None,
                     is_final=True,
                     final_answer=final_answer,
+                    llm_usage=llm_usage,
+                    llm_usage_details=llm_usage_details,
                 ))
                 return final_answer
 
@@ -307,6 +341,8 @@ class StructuredReActLoop:
 
         for step_num in range(1, self.max_steps + 1):
             logger.info(f"StructuredReAct step {step_num}/{self.max_steps}")
+            llm_usage_details: dict[str, Any] | None = None
+            llm_usage: dict[str, int] | None = None
 
             try:
                 provider_step = await structured_completion(
@@ -317,6 +353,8 @@ class StructuredReActLoop:
                     trace_name=f"agent-step-{step_num}",
                     trace_metadata={"loop": "instructor-react", "step": step_num, "max_steps": self.max_steps},
                 )
+                llm_usage_details = get_last_usage_details()
+                llm_usage = summarize_usage(llm_usage_details)
                 step: AgentReActStep = AgentReActStep.model_validate(
                     _structured_payload_to_mapping(provider_step)
                 )
@@ -324,6 +362,8 @@ class StructuredReActLoop:
                 error_text = str(exc).lower()
                 if "multiple tool calls" in error_text and not getattr(self, "_retried_single_action", False):
                     logger.warning("  Structured output returned multiple tool calls; retrying once with stricter single-action instruction")
+                    initial_usage_details = get_last_usage_details()
+                    initial_usage = summarize_usage(initial_usage_details)
                     self._retried_single_action = True
                     self._strengthen_single_action_instruction()
                     provider_step = await structured_completion(
@@ -334,6 +374,10 @@ class StructuredReActLoop:
                         trace_name=f"agent-step-{step_num}-retry",
                         trace_metadata={"loop": "instructor-react", "step": step_num, "retry": True},
                     )
+                    retry_usage_details = get_last_usage_details()
+                    retry_usage = summarize_usage(retry_usage_details)
+                    llm_usage = merge_usage_summaries(initial_usage, retry_usage)
+                    llm_usage_details = retry_usage_details or initial_usage_details
                     step = AgentReActStep.model_validate(
                         _structured_payload_to_mapping(provider_step)
                     )
@@ -363,6 +407,8 @@ class StructuredReActLoop:
                 thought=step.thought[:500],
                 has_action=step.action is not None,
                 has_final=step.final_answer is not None,
+                llm_usage=llm_usage,
+                llm_usage_details=llm_usage_details,
             )
 
             final_answer = step.final_answer
@@ -397,6 +443,8 @@ class StructuredReActLoop:
                             thought=step.thought,
                             action=None,
                             observation=f"Pipeline enforcement: redirected to {next_stage}",
+                            llm_usage=llm_usage,
+                            llm_usage_details=llm_usage_details,
                         ))
                         continue
 
@@ -421,6 +469,8 @@ class StructuredReActLoop:
                             observation=None,
                             is_final=True,
                             final_answer=normalized,
+                            llm_usage=llm_usage,
+                            llm_usage_details=llm_usage_details,
                         ))
                         return normalized
                     except Exception:
@@ -442,6 +492,11 @@ class StructuredReActLoop:
                                 "final_output": self.final_response_model.__name__,
                             },
                         )
+                        final_usage_details = get_last_usage_details()
+                        final_usage = summarize_usage(final_usage_details)
+                        llm_usage = merge_usage_summaries(llm_usage, final_usage)
+                        if final_usage_details is not None:
+                            llm_usage_details = final_usage_details
                         normalized = json.dumps(
                             final_output.model_dump(mode="json"),
                             ensure_ascii=False,
@@ -454,6 +509,8 @@ class StructuredReActLoop:
                             observation=None,
                             is_final=True,
                             final_answer=normalized,
+                            llm_usage=llm_usage,
+                            llm_usage_details=llm_usage_details,
                         ))
                         return normalized
 
@@ -463,6 +520,8 @@ class StructuredReActLoop:
                     observation=None,
                     is_final=True,
                     final_answer=final_answer,
+                    llm_usage=llm_usage,
+                    llm_usage_details=llm_usage_details,
                 ))
                 return final_answer
 
@@ -502,6 +561,8 @@ class StructuredReActLoop:
                     thought=step.thought,
                     action=Action(name=action_name, arguments=action_args),
                     observation=observation,
+                    llm_usage=llm_usage,
+                    llm_usage_details=llm_usage_details,
                 ))
             else:
                 if not self.allow_thought_as_final:

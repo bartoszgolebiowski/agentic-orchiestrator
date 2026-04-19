@@ -31,6 +31,4 @@ system_prompt: >
 
   Return ONLY the JSON object, no commentary. If the user text is ambiguous about
   operations, default to a single "add_comment" with the work summary as text.
-mcp_dependencies:
-  - trello
 max_steps: 8

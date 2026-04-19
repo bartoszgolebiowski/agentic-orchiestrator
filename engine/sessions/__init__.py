@@ -1,5 +1,6 @@
 from engine.sessions.models import (
     ConversationTurn,
+    HitlApprovalScope,
     HitlResponse,
     PendingToolCall,
     SessionData,
@@ -12,6 +13,7 @@ __all__ = [
     "ConversationTurn",
     "HitlCallback",
     "HitlManager",
+    "HitlApprovalScope",
     "HitlResponse",
     "PendingToolCall",
     "SessionData",

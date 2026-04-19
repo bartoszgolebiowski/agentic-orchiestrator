@@ -18,6 +18,7 @@ from engine.main import Engine, build_mcp_manager
 from engine.sessions.hitl import HitlManager
 from engine.sessions.models import (
     ConversationTurn,
+    HitlApprovalScope,
     HitlResponse,
     PendingToolCall,
     SessionData,
@@ -109,6 +110,8 @@ async def _run_engine_with_session(
 
         session.result = result
         session.status = SessionStatus.COMPLETED
+        if hitl_manager.is_session_auto_approved(session.id):
+            session.hitl_approval_scope = HitlApprovalScope.SESSION
         session.conversation_history.append(
             ConversationTurn(role="assistant", content=result)
         )
@@ -119,6 +122,8 @@ async def _run_engine_with_session(
         emit_event(EventType.RUN_ERROR, error=f"{type(exc).__name__}: {exc}")
         session.status = SessionStatus.FAILED
         session.error = f"{type(exc).__name__}: {exc}"
+        if hitl_manager.is_session_auto_approved(session.id):
+            session.hitl_approval_scope = HitlApprovalScope.SESSION
         session.pending_tool_call = None
         await repository.update(session)
     finally:
@@ -144,7 +149,7 @@ async def start_session(query: str, config_dir: str, app_state: object) -> Strea
         conversation_history=[ConversationTurn(role="user", content=query)],
     )
     await repository.create(session)
-    hitl_manager.register_session(session.id)
+    hitl_manager.register_session(session.id, session.hitl_approval_scope)
 
     queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
     asyncio.create_task(_run_engine_with_session(session, queue, app_state))
@@ -193,9 +198,12 @@ async def submit_hitl_response(session_id: str, request: HitlResponseRequest) ->
 
     response = HitlResponse(
         approved=request.approved,
+        approval_scope=request.approval_scope,
         modified_arguments=request.modified_arguments,
         rejection_reason=request.rejection_reason,
     )
+    if response.approved and response.approval_scope == HitlApprovalScope.SESSION:
+        session.hitl_approval_scope = HitlApprovalScope.SESSION
     session.status = SessionStatus.RUNNING
     session.pending_tool_call = None
     await repository.update(session)

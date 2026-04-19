@@ -438,7 +438,10 @@ class TestTracingIntegration:
         assert "add({\"a\": 1, \"b\": 2})" in calls["observe"]["input"]
         assert "Tool call id: call_1" in calls["observe"]["input"]
         assert calls["observe"]["metadata"] == {"run_id": "abc123"}
-        assert calls["updates"][0]["usage_details"] == {"input_tokens": 3, "output_tokens": 4}
+        usage_details = calls["updates"][0]["usage_details"]
+        assert usage_details["input_tokens"] == 3
+        assert usage_details["output_tokens"] == 4
+        assert usage_details["total_tokens"] == 7
 
     @pytest.mark.asyncio
     async def test_structured_completion_uses_native_parse_api(self, monkeypatch):
@@ -452,7 +455,7 @@ class TestTracingIntegration:
                 return False
 
             def update(self, **kwargs):
-                pass
+                captured.setdefault("updates", []).append(kwargs)
 
         class DummyResponseModel(BaseModel):
             value: str
@@ -461,8 +464,17 @@ class TestTracingIntegration:
             content = None
             parsed = DummyResponseModel(value="ok")
 
+        class DummyUsage:
+            def model_dump(self):
+                return {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 2,
+                    "total_tokens": 7,
+                }
+
         class DummyResponse:
             choices = [MagicMock(message=DummyMessage())]
+            usage = DummyUsage()
 
         class DummyCompletions:
             async def parse(self, **kwargs):
@@ -492,6 +504,10 @@ class TestTracingIntegration:
         assert "hello" in captured["observe"]["input"]
         assert captured["text_format"] is DummyResponseModel
         assert captured["model"] == "gpt-test"
+        usage_details = captured["updates"][0]["usage_details"]
+        assert usage_details["input_tokens"] == 5
+        assert usage_details["output_tokens"] == 2
+        assert usage_details["total_tokens"] == 7
         assert result.value == "ok"
 
     @pytest.mark.asyncio
@@ -506,7 +522,7 @@ class TestTracingIntegration:
                 return False
 
             def update(self, **kwargs):
-                pass
+                captured.setdefault("updates", []).append(kwargs)
 
         class DummyResponseModel(BaseModel):
             value: str
@@ -515,8 +531,17 @@ class TestTracingIntegration:
             content = '{"value":"ok"}'
             parsed = None
 
+        class DummyUsage:
+            def model_dump(self):
+                return {
+                    "prompt_tokens": 8,
+                    "completion_tokens": 3,
+                    "total_tokens": 11,
+                }
+
         class DummyResponse:
             choices = [SimpleNamespace(message=DummyMessage())]
+            usage = DummyUsage()
 
         class DummyBadRequestError(Exception):
             pass
@@ -556,6 +581,10 @@ class TestTracingIntegration:
         assert "Trace kind: structured_completion" in captured["observe"]["input"]
         assert "Response model: DummyResponseModel" in captured["observe"]["input"]
         assert captured["text"] == {"format": {"type": "json_object"}}
+        usage_details = captured["updates"][0]["usage_details"]
+        assert usage_details["input_tokens"] == 8
+        assert usage_details["output_tokens"] == 3
+        assert usage_details["total_tokens"] == 11
         assert result.value == "ok"
 
     @pytest.mark.asyncio

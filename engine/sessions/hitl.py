@@ -5,7 +5,7 @@ import asyncio
 import logging
 from typing import Awaitable, Callable
 
-from engine.sessions.models import HitlResponse, PendingToolCall
+from engine.sessions.models import HitlApprovalScope, HitlResponse, PendingToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +18,27 @@ class HitlManager:
 
     def __init__(self) -> None:
         self._queues: dict[str, asyncio.Queue[HitlResponse]] = {}
+        self._approval_scopes: dict[str, HitlApprovalScope] = {}
 
-    def register_session(self, session_id: str) -> None:
+    def register_session(
+        self,
+        session_id: str,
+        approval_scope: HitlApprovalScope = HitlApprovalScope.ONCE,
+    ) -> None:
         if session_id not in self._queues:
             self._queues[session_id] = asyncio.Queue(maxsize=1)
+        self._approval_scopes[session_id] = approval_scope
 
     def unregister_session(self, session_id: str) -> None:
         self._queues.pop(session_id, None)
+        self._approval_scopes.pop(session_id, None)
+
+    def is_session_auto_approved(self, session_id: str) -> bool:
+        return self._approval_scopes.get(session_id) == HitlApprovalScope.SESSION
+
+    def set_approval_scope(self, session_id: str, approval_scope: HitlApprovalScope) -> None:
+        if session_id in self._queues:
+            self._approval_scopes[session_id] = approval_scope
 
     async def wait_for_human(self, session_id: str) -> HitlResponse:
         """Called inside the engine task to block until the human responds."""
@@ -39,6 +53,8 @@ class HitlManager:
         queue = self._queues.get(session_id)
         if queue is None:
             raise ValueError(f"No HITL queue registered for session {session_id}")
+        if response.approved and response.approval_scope == HitlApprovalScope.SESSION:
+            self._approval_scopes[session_id] = HitlApprovalScope.SESSION
         await queue.put(response)
         logger.info(f"HITL: human response submitted for session {session_id}: approved={response.approved}")
 
@@ -50,8 +66,16 @@ class HitlManager:
         """Create an HitlCallback bound to a specific session."""
 
         async def _callback(pending: PendingToolCall) -> HitlResponse:
+            if self.is_session_auto_approved(session_id):
+                return HitlResponse(
+                    approved=True,
+                    approval_scope=HitlApprovalScope.SESSION,
+                )
             if on_pause is not None:
                 await on_pause(pending)
-            return await self.wait_for_human(session_id)
+            response = await self.wait_for_human(session_id)
+            if response.approved and response.approval_scope == HitlApprovalScope.SESSION:
+                self._approval_scopes[session_id] = HitlApprovalScope.SESSION
+            return response
 
         return _callback

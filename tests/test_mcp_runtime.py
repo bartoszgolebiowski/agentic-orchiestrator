@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 
 import anyio
@@ -9,6 +10,7 @@ import pytest
 
 from engine.mcp.runtime import McpManager, McpServerRuntime, ResolvedMcpTool, build_openai_mcp_tool_spec
 from engine.mcp.models import McpHttpConnectionConfig, McpServerConfig
+from engine.core.events import EventType
 from engine.core.models import NodeConfig, RoleType
 from engine.roles.subagent import SubagentExecutor
 
@@ -300,7 +302,7 @@ async def test_mcp_include_tools_filters_to_allowlist() -> None:
         client=None,  # type: ignore[arg-type]
         mcp_manager=manager,
     )
-    specs, descriptions, allowed_ids = await executor._build_mcp_tool_context()
+    specs, descriptions, allowed_ids, _ = await executor._build_mcp_tool_context()
 
     assert set(allowed_ids) == {"srv__get_card", "srv__add_card"}
     assert len(specs) == 2
@@ -328,7 +330,7 @@ async def test_mcp_include_tools_empty_filter_blocks_all() -> None:
         client=None,  # type: ignore[arg-type]
         mcp_manager=manager,
     )
-    specs, descriptions, allowed_ids = await executor._build_mcp_tool_context()
+    specs, descriptions, allowed_ids, _ = await executor._build_mcp_tool_context()
 
     assert allowed_ids == []
     assert specs == []
@@ -352,7 +354,7 @@ async def test_mcp_include_tools_no_filter_returns_all() -> None:
         client=None,  # type: ignore[arg-type]
         mcp_manager=manager,
     )
-    specs, descriptions, allowed_ids = await executor._build_mcp_tool_context()
+    specs, descriptions, allowed_ids, _ = await executor._build_mcp_tool_context()
 
     assert set(allowed_ids) == {"srv__get_card", "srv__add_card"}
     await manager.aclose()
@@ -404,9 +406,387 @@ async def test_mcp_include_tools_unfiltered_server_keeps_all() -> None:
         client=None,  # type: ignore[arg-type]
         mcp_manager=mgr,
     )
-    _, _, allowed_ids = await executor._build_mcp_tool_context()
+    _, _, allowed_ids, _ = await executor._build_mcp_tool_context()
 
     assert "a__toolA1" in allowed_ids
     assert "a__toolA2" not in allowed_ids
     assert "b__toolB1" in allowed_ids
     await mgr.aclose()
+
+
+class _DummyAssistantMessage:
+    def __init__(self, *, content: str, tool_calls: list[SimpleNamespace] | None = None) -> None:
+        self.content = content
+        self.tool_calls = tool_calls or []
+
+    def model_dump(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "role": "assistant",
+            "content": self.content,
+        }
+        if self.tool_calls:
+            payload["tool_calls"] = [
+                {
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments,
+                    },
+                }
+                for tool_call in self.tool_calls
+            ]
+        return payload
+
+
+class _DummyMcpManager:
+    def __init__(self, *, call_results: list[str]) -> None:
+        self._call_results = list(call_results)
+        self.call_history: list[tuple[str, dict[str, object]]] = []
+
+    async def describe_tools(self, server_ids: list[str]) -> list[ResolvedMcpTool]:
+        assert server_ids == ["trello"]
+        return [
+            ResolvedMcpTool(
+                server_id="trello",
+                remote_name="add_card_to_list",
+                exposed_name="trello__add_card_to_list",
+                description="add a card",
+                input_schema={"type": "object", "properties": {}},
+            )
+        ]
+
+    async def call_tool(self, exposed_name: str, arguments: dict[str, object]) -> str:
+        self.call_history.append((exposed_name, arguments))
+        return self._call_results.pop(0)
+
+
+def _tool_call(*, call_id: str, name: str, arguments: dict[str, object]) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=call_id,
+        function=SimpleNamespace(name=name, arguments=json.dumps(arguments)),
+    )
+
+
+def _snapshot_messages(messages: list[dict[str, object]]) -> list[dict[str, object]]:
+    return json.loads(json.dumps(messages))
+
+
+@pytest.mark.asyncio
+async def test_subagent_execute_projects_mcp_output_before_next_react_turn(monkeypatch) -> None:
+    verbose_result = json.dumps(
+        {
+            "id": "card-1",
+            "name": "Implement login",
+            "desc": "x" * 500,
+            "due": "2026-04-12T12:00:00.000Z",
+            "dueComplete": False,
+            "idList": "list-1",
+            "labels": [
+                {"id": "lbl-1", "name": "backend", "color": "blue"},
+                {"id": "lbl-2", "name": "urgent", "color": "red"},
+            ],
+            "url": "https://trello.example/card/1",
+            "shortUrl": "https://trello.example/c/1",
+            "memberships": [{"idMember": "m1", "memberType": "normal"}],
+            "badges": {"votes": 99, "attachments": 12},
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    mcp_manager = _DummyMcpManager(call_results=[verbose_result])
+
+    sub_config = NodeConfig(
+        id="trello_publisher_test",
+        role_type=RoleType.SUBAGENT,
+        description="test",
+        system_prompt="test",
+        mcp_dependencies=["trello"],
+        mcp_include_tools={"trello": ["add_card_to_list"]},
+        tool_result_projection={
+            "trello__add_card_to_list": {
+                "id": "$.id",
+                "name": "$.name",
+                "desc": "$.desc",
+                "due": "$.due",
+                "dueComplete": "$.dueComplete",
+                "idList": "$.idList",
+                "labels": "$.labels[*].name",
+                "url": "$.url",
+                "shortUrl": "$.shortUrl",
+            }
+        },
+        max_steps=3,
+    )
+    executor = SubagentExecutor(
+        config=sub_config,
+        engine_config=_make_engine_config(),
+        client=SimpleNamespace(),
+        mcp_manager=mcp_manager,
+    )
+
+    captured_threads: list[list[dict[str, object]]] = []
+    responses = [
+        _DummyAssistantMessage(
+            content="Need to create a card",
+            tool_calls=[
+                _tool_call(
+                    call_id="call_1",
+                    name="trello__add_card_to_list",
+                    arguments={"listId": "list-1", "name": "Implement login"},
+                )
+            ],
+        ),
+        _DummyAssistantMessage(content='{"status":"ok"}'),
+    ]
+    captured_events: list[tuple[EventType, dict[str, object]]] = []
+
+    async def fake_chat_completion(*, client, messages, tools, model, trace_name, trace_metadata, temperature=0.0):
+        captured_threads.append(_snapshot_messages(messages))
+        return responses.pop(0)
+
+    def fake_emit_event(event_type: EventType, **data: object) -> None:
+        captured_events.append((event_type, data))
+
+    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
+    monkeypatch.setattr("engine.agents.subagent.emit_event", fake_emit_event)
+
+    result = await executor.execute("publish", input_json={"plan": "demo"})
+
+    assert result == '{"status":"ok"}'
+    assert mcp_manager.call_history == [
+        (
+            "trello__add_card_to_list",
+            {"listId": "list-1", "name": "Implement login"},
+        )
+    ]
+    assert len(captured_threads) == 2
+
+    first_turn_tool_messages = [m for m in captured_threads[0] if m.get("role") == "tool"]
+    assert first_turn_tool_messages == []
+
+    second_turn_tool_messages = [m for m in captured_threads[1] if m.get("role") == "tool"]
+    assert len(second_turn_tool_messages) == 1
+    projected_observation = str(second_turn_tool_messages[0]["content"])
+    projected_payload = json.loads(projected_observation)
+
+    assert projected_payload == {
+        "desc": "x" * 500,
+        "due": "2026-04-12T12:00:00.000Z",
+        "dueComplete": False,
+        "id": "card-1",
+        "idList": "list-1",
+        "labels": ["backend", "urgent"],
+        "name": "Implement login",
+        "shortUrl": "https://trello.example/c/1",
+        "url": "https://trello.example/card/1",
+    }
+    assert "memberships" not in projected_observation
+    assert "badges" not in projected_observation
+    assert len(projected_observation) < len(verbose_result)
+
+    tool_finished_events = [
+        event_data
+        for event_type, event_data in captured_events
+        if event_type == EventType.TOOL_CALL_FINISHED and event_data.get("tool") == "trello__add_card_to_list"
+    ]
+    assert len(tool_finished_events) == 1
+    assert "io_usage_estimate" in tool_finished_events[0]
+    io_usage = tool_finished_events[0]["io_usage_estimate"]
+    assert io_usage["input_tokens_estimate"] > 0
+    assert io_usage["output_tokens_estimate"] > 0
+
+
+@pytest.mark.asyncio
+async def test_subagent_execute_projects_every_mcp_observation_across_react_turns(monkeypatch) -> None:
+    verbose_results = [
+        json.dumps(
+            {
+                "id": "card-1",
+                "name": "Task A",
+                "desc": "first",
+                "due": None,
+                "dueComplete": False,
+                "idList": "list-1",
+                "labels": [{"name": "backend", "color": "blue"}],
+                "url": "https://trello.example/card/1",
+                "shortUrl": "https://trello.example/c/1",
+                "attachments": [{"id": "a1", "name": "spec.pdf"}],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        json.dumps(
+            {
+                "id": "card-2",
+                "name": "Task B",
+                "desc": "second",
+                "due": "2026-04-13T10:00:00.000Z",
+                "dueComplete": True,
+                "idList": "list-1",
+                "labels": [{"name": "frontend", "color": "green"}],
+                "url": "https://trello.example/card/2",
+                "shortUrl": "https://trello.example/c/2",
+                "attachments": [{"id": "a2", "name": "wireframe.png"}],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    ]
+    mcp_manager = _DummyMcpManager(call_results=verbose_results)
+
+    sub_config = NodeConfig(
+        id="trello_publisher_test",
+        role_type=RoleType.SUBAGENT,
+        description="test",
+        system_prompt="test",
+        mcp_dependencies=["trello"],
+        mcp_include_tools={"trello": ["add_card_to_list"]},
+        tool_result_projection={
+            "trello__add_card_to_list": {
+                "id": "$.id",
+                "name": "$.name",
+                "desc": "$.desc",
+                "due": "$.due",
+                "dueComplete": "$.dueComplete",
+                "idList": "$.idList",
+                "labels": "$.labels[*].name",
+                "url": "$.url",
+                "shortUrl": "$.shortUrl",
+            }
+        },
+        max_steps=4,
+    )
+    executor = SubagentExecutor(
+        config=sub_config,
+        engine_config=_make_engine_config(),
+        client=SimpleNamespace(),
+        mcp_manager=mcp_manager,
+    )
+
+    captured_threads: list[list[dict[str, object]]] = []
+    responses = [
+        _DummyAssistantMessage(
+            content="Create first card",
+            tool_calls=[
+                _tool_call(
+                    call_id="call_1",
+                    name="trello__add_card_to_list",
+                    arguments={"listId": "list-1", "name": "Task A"},
+                )
+            ],
+        ),
+        _DummyAssistantMessage(
+            content="Create second card",
+            tool_calls=[
+                _tool_call(
+                    call_id="call_2",
+                    name="trello__add_card_to_list",
+                    arguments={"listId": "list-1", "name": "Task B"},
+                )
+            ],
+        ),
+        _DummyAssistantMessage(content='{"status":"published"}'),
+    ]
+
+    async def fake_chat_completion(*, client, messages, tools, model, trace_name, trace_metadata, temperature=0.0):
+        captured_threads.append(_snapshot_messages(messages))
+        return responses.pop(0)
+
+    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
+
+    result = await executor.execute("publish", input_json={"plan": "demo"})
+
+    assert result == '{"status":"published"}'
+    assert len(captured_threads) == 3
+
+    third_turn_tool_messages = [m for m in captured_threads[2] if m.get("role") == "tool"]
+    assert len(third_turn_tool_messages) == 2
+
+    first_observation = str(third_turn_tool_messages[0]["content"])
+    second_observation = str(third_turn_tool_messages[1]["content"])
+    first_payload = json.loads(first_observation)
+    second_payload = json.loads(second_observation)
+
+    assert first_payload["id"] == "card-1"
+    assert first_payload["labels"] == ["backend"]
+    assert second_payload["id"] == "card-2"
+    assert second_payload["labels"] == ["frontend"]
+    assert "attachments" not in first_observation
+    assert "attachments" not in second_observation
+
+
+@pytest.mark.asyncio
+async def test_subagent_execute_fails_closed_when_projection_cannot_apply(monkeypatch) -> None:
+    verbose_raw_result = json.dumps(
+        {
+            "unexpected": "SENSITIVE-" + ("X" * 1000),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    mcp_manager = _DummyMcpManager(call_results=[verbose_raw_result])
+
+    sub_config = NodeConfig(
+        id="trello_publisher_test",
+        role_type=RoleType.SUBAGENT,
+        description="test",
+        system_prompt="test",
+        mcp_dependencies=["trello"],
+        mcp_include_tools={"trello": ["add_card_to_list"]},
+        tool_result_projection={
+            "trello__add_card_to_list": {
+                "id": "$.id",
+                "name": "$.name",
+                "desc": "$.desc",
+                "due": "$.due",
+                "dueComplete": "$.dueComplete",
+                "idList": "$.idList",
+                "labels": "$.labels[*].name",
+                "url": "$.url",
+                "shortUrl": "$.shortUrl",
+            }
+        },
+        max_steps=3,
+    )
+    executor = SubagentExecutor(
+        config=sub_config,
+        engine_config=_make_engine_config(),
+        client=SimpleNamespace(),
+        mcp_manager=mcp_manager,
+    )
+
+    captured_threads: list[list[dict[str, object]]] = []
+    responses = [
+        _DummyAssistantMessage(
+            content="Need to create a card",
+            tool_calls=[
+                _tool_call(
+                    call_id="call_1",
+                    name="trello__add_card_to_list",
+                    arguments={"listId": "list-1", "name": "Implement login"},
+                )
+            ],
+        ),
+        _DummyAssistantMessage(content='{"status":"ok"}'),
+    ]
+
+    async def fake_chat_completion(*, client, messages, tools, model, trace_name, trace_metadata, temperature=0.0):
+        captured_threads.append(_snapshot_messages(messages))
+        return responses.pop(0)
+
+    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
+
+    result = await executor.execute("publish", input_json={"plan": "demo"})
+
+    assert result == '{"status":"ok"}'
+    assert len(captured_threads) == 2
+
+    second_turn_tool_messages = [m for m in captured_threads[1] if m.get("role") == "tool"]
+    assert len(second_turn_tool_messages) == 1
+    observation = str(second_turn_tool_messages[0]["content"])
+
+    assert observation.startswith("ERROR:")
+    assert "SENSITIVE-" not in observation
+    assert "unexpected" not in observation
+    assert verbose_raw_result not in json.dumps(captured_threads[1], ensure_ascii=False)

@@ -273,6 +273,7 @@
   .hitl-dialog .hitl-actions {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
   }
 
   .hitl-dialog .hitl-actions button {
@@ -289,6 +290,11 @@
   .hitl-dialog .hitl-approve {
     background: var(--green);
     color: #fff;
+  }
+
+  .hitl-dialog .hitl-approve-session {
+    background: var(--accent);
+    color: #111;
   }
 
   .hitl-dialog .hitl-reject {
@@ -446,7 +452,7 @@
       case 'tool_call_started':  return `${d.tool}(${shortArgs(d.arguments)})` + (d.source === 'mcp' ? ' [MCP]' : '');
       case 'tool_call_finished': return `${d.tool} \u2192 ${truncate(d.result || '', 120)}`;
       case 'hitl_required':      return `${d.tool}(${shortArgs(d.arguments)})` + (d.source === 'mcp' ? ' [MCP]' : '');
-      case 'hitl_response':      return `${d.tool} \u2192 ${d.approved ? 'APPROVED' : 'REJECTED'}`;
+      case 'hitl_response':      return `${d.tool} \u2192 ${d.approved ? 'APPROVED' : 'REJECTED'}` + (d.approval_scope === 'session' ? ' [SESSION]' : '');
       case 'warning':            return d.message || JSON.stringify(d);
       default:                   return JSON.stringify(d);
     }
@@ -489,7 +495,8 @@
       `<div class="hitl-tool">${escapeHtml(d.tool || 'unknown')}</div>` +
       `<div class="hitl-args">${escapeHtml(JSON.stringify(d.arguments || {}, null, 2))}</div>` +
       `<div class="hitl-actions">` +
-        `<button class="hitl-approve">Approve</button>` +
+        `<button class="hitl-approve">Approve Once</button>` +
+        `<button class="hitl-approve-session">Approve For Session</button>` +
         `<button class="hitl-reject">Reject</button>` +
       `</div>`;
 
@@ -497,11 +504,13 @@
     scrollBottom(messagesEl);
 
     const approveBtn = dialog.querySelector('.hitl-approve');
+    const approveSessionBtn = dialog.querySelector('.hitl-approve-session');
     const rejectBtn = dialog.querySelector('.hitl-reject');
     const actionsEl = dialog.querySelector('.hitl-actions');
 
-    async function respond(approved) {
+    async function respond(approved, approvalScope = 'once') {
       approveBtn.disabled = true;
+      approveSessionBtn.disabled = true;
       rejectBtn.disabled = true;
 
       try {
@@ -510,6 +519,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             approved,
+            approval_scope: approved ? approvalScope : 'once',
             rejection_reason: approved ? null : 'Rejected by user',
           }),
         });
@@ -517,7 +527,11 @@
         actionsEl.remove();
         const resolved = document.createElement('div');
         resolved.className = 'hitl-resolved ' + (approved ? 'approved' : 'rejected');
-        resolved.textContent = approved ? '\u2713 Approved' : '\u2717 Rejected';
+        if (approved && approvalScope === 'session') {
+          resolved.textContent = '\u2713 Approved for session';
+        } else {
+          resolved.textContent = approved ? '\u2713 Approved once' : '\u2717 Rejected';
+        }
         dialog.appendChild(resolved);
         setStatus('Running...', 'running');
       } catch (err) {
@@ -525,7 +539,8 @@
       }
     }
 
-    approveBtn.addEventListener('click', () => respond(true));
+    approveBtn.addEventListener('click', () => respond(true, 'once'));
+    approveSessionBtn.addEventListener('click', () => respond(true, 'session'));
     rejectBtn.addEventListener('click', () => respond(false));
 
     setStatus('Waiting for confirmation...', 'running');

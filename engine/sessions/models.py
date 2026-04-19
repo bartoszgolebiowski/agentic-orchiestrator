@@ -16,6 +16,11 @@ class SessionStatus(str, Enum):
     FAILED = "failed"
 
 
+class HitlApprovalScope(str, Enum):
+    ONCE = "once"
+    SESSION = "session"
+
+
 class PendingToolCall(BaseModel):
     """Captures a tool invocation that is awaiting human confirmation."""
     tool_name: str
@@ -28,6 +33,7 @@ class PendingToolCall(BaseModel):
 class HitlResponse(BaseModel):
     """Human response to a pending tool call."""
     approved: bool
+    approval_scope: HitlApprovalScope = HitlApprovalScope.ONCE
     modified_arguments: dict[str, Any] | None = None
     rejection_reason: str | None = None
 
@@ -48,6 +54,7 @@ class SessionData(BaseModel):
     conversation_history: list[ConversationTurn] = Field(default_factory=list)
     events: list[dict[str, Any]] = Field(default_factory=list)
     pending_tool_call: PendingToolCall | None = None
+    hitl_approval_scope: HitlApprovalScope = HitlApprovalScope.ONCE
     result: str | None = None
     error: str | None = None
     created_at: float = Field(default_factory=time.time)

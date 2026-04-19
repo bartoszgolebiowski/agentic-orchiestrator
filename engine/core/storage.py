@@ -1,6 +1,7 @@
 """Backward-compat shim — use engine.sessions directly."""
 from engine.sessions.models import (
     ConversationTurn,
+    HitlApprovalScope,
     HitlResponse,
     PendingToolCall,
     SessionData,
@@ -10,6 +11,7 @@ from engine.sessions.repository import SessionRepository, SQLiteSessionRepositor
 
 __all__ = [
     "ConversationTurn",
+    "HitlApprovalScope",
     "HitlResponse",
     "PendingToolCall",
     "SessionData",

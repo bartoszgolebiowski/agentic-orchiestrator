@@ -11,6 +11,7 @@ import pytest
 
 from engine.core.storage import (
     ConversationTurn,
+    HitlApprovalScope,
     HitlResponse,
     PendingToolCall,
     SessionData,
@@ -40,6 +41,7 @@ async def test_create_and_get_session(repo):
     assert loaded.id == session.id
     assert loaded.query == "What is 2+2?"
     assert loaded.status == SessionStatus.RUNNING
+    assert loaded.hitl_approval_scope == HitlApprovalScope.ONCE
     assert len(loaded.conversation_history) == 1
     assert loaded.conversation_history[0].role == "user"
     assert loaded.conversation_history[0].content == "What is 2+2?"
@@ -216,3 +218,14 @@ async def test_complex_round_trip(repo):
     assert loaded.pending_tool_call is not None
     assert loaded.pending_tool_call.arguments["labels"] == ["urgent"]
     assert loaded.pending_tool_call.source == "mcp"
+
+
+@pytest.mark.asyncio
+async def test_hitl_approval_scope_round_trip(repo):
+    session = SessionData(query="approve for session")
+    session.hitl_approval_scope = HitlApprovalScope.SESSION
+    await repo.create(session)
+
+    loaded = await repo.get(session.id)
+    assert loaded is not None
+    assert loaded.hitl_approval_scope == HitlApprovalScope.SESSION

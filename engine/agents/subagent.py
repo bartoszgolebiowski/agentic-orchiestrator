@@ -8,12 +8,13 @@ from openai import AsyncOpenAI
 from engine.events import EventType, emit_event
 from engine.config.models import NodeConfig, RoleType, EngineConfig
 from engine.agents.react import ReActLoop
+from engine.llm.client import estimate_io_usage
 from engine.security import enforce_agent_boundary
 from engine.sessions.models import PendingToolCall
 from engine.sessions.hitl import HitlCallback
 from engine.llm.tracing import observe
 from engine.tools.registry import get_tool, build_openai_tool_spec
-from engine.tools.projection import project_tool_result
+from engine.tools.projection import project_tool_result_strict
 from engine.mcp.runtime import McpManager, build_openai_mcp_tool_spec
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,19 @@ class SubagentExecutor:
         allowed_ids = [*local_allowed_ids, *mcp_allowed_ids]
         projections = self.config.tool_result_projection
 
+        if self.config.mcp_include_tools:
+            missing_projection_ids = [tool_name for tool_name in mcp_allowed_ids if tool_name not in projections]
+            if missing_projection_ids:
+                raise ValueError(
+                    f"Subagent '{self.config.id}' must define tool_result_projection for MCP tools: {sorted(missing_projection_ids)}"
+                )
+
+        def project_observation(tool_name: str, result_text: str) -> str:
+            projection = projections.get(tool_name)
+            if projection is None:
+                return result_text
+            return project_tool_result_strict(result_text, projection)
+
         async def handle_action(name: str, arguments: dict[str, Any]) -> str:
             enforce_agent_boundary(
                 caller_role=RoleType.SUBAGENT,
@@ -174,15 +188,16 @@ class SubagentExecutor:
                 ) as tool_span:
                     result = await tool_fn(**arguments)
                     result_text = str(result)
-                    if name in projections:
-                        result_text = project_tool_result(result_text, projections[name])
+                    result_text = project_observation(name, result_text)
+                    io_usage = estimate_io_usage(arguments, result_text)
                     if tool_span is not None:
-                        tool_span.update(output=result_text)
+                        tool_span.update(output=result_text, metadata={"io_usage_estimate": io_usage})
                     emit_event(
                         EventType.TOOL_CALL_FINISHED,
                         subagent_id=self.config.id,
                         tool=name,
                         result=result_text[:500],
+                        io_usage_estimate=io_usage,
                     )
                     return result_text
 
@@ -213,6 +228,7 @@ class SubagentExecutor:
                         EventType.HITL_RESPONSE,
                         tool=name,
                         approved=hitl_response.approved,
+                        approval_scope=hitl_response.approval_scope,
                         rejection_reason=hitl_response.rejection_reason,
                     )
                     if not hitl_response.approved:
@@ -241,16 +257,17 @@ class SubagentExecutor:
                     },
                 ) as tool_span:
                     result_text = await self.mcp_manager.call_tool(name, arguments)
-                    if name in projections:
-                        result_text = project_tool_result(result_text, projections[name])
+                    result_text = project_observation(name, result_text)
+                    io_usage = estimate_io_usage(arguments, result_text)
                     if tool_span is not None:
-                        tool_span.update(output=result_text)
+                        tool_span.update(output=result_text, metadata={"io_usage_estimate": io_usage})
                     emit_event(
                         EventType.TOOL_CALL_FINISHED,
                         subagent_id=self.config.id,
                         tool=name,
                         result=result_text[:500],
                         source="mcp",
+                        io_usage_estimate=io_usage,
                     )
                     return result_text
 

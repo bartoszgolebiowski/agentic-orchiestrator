@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from engine.sessions.models import HitlApprovalScope
+
 
 class ChatRequest(BaseModel):
     query: str
@@ -10,6 +12,7 @@ class ChatRequest(BaseModel):
 
 class HitlResponseRequest(BaseModel):
     approved: bool
+    approval_scope: HitlApprovalScope = HitlApprovalScope.ONCE
     modified_arguments: dict | None = None
     rejection_reason: str | None = None
 

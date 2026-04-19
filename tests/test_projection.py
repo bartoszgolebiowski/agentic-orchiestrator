@@ -7,7 +7,12 @@ import pytest
 
 from engine.config.loader import load_engine_config
 from engine.config.models import NodeConfig, RoleType
-from engine.tools.projection import compile_projection, project_tool_result, validate_projection_spec
+from engine.tools.projection import (
+    compile_projection,
+    project_tool_result,
+    project_tool_result_strict,
+    validate_projection_spec,
+)
 
 
 CONFIGS_DIR = Path(__file__).parent.parent / "configs"
@@ -44,6 +49,18 @@ class TestProjectSelector:
         raw = _json({"id": "123"})
         result = project_tool_result(raw, "[[[bad")
         assert result == raw
+
+
+class TestStrictProjectSelector:
+    def test_rejects_non_json_output(self) -> None:
+        with pytest.raises(ValueError, match="requires JSON output"):
+            project_tool_result_strict("plain text response", {"id": "$.id"})
+
+    def test_rejects_missing_projection_result(self) -> None:
+        raw = _json({"unexpected": "payload"})
+
+        with pytest.raises(ValueError, match="produced no result"):
+            project_tool_result_strict(raw, {"id": "$.id"})
 
 
 class TestProjectFieldMap:
@@ -290,6 +307,36 @@ class TestProjectionYAMLLoading:
         assert publisher.tool_result_projection["trello__add_card_to_list"]["id"] == "$.id"
         assert publisher.tool_result_projection["trello__add_card_to_list"]["labels"] == "$.labels[*].name"
         assert publisher.tool_result_projection["trello__get_checklist_by_name"]["checkItems"]["path"] == "$.checkItems[*]"
+
+    def test_trello_intake_parser_exposes_no_trello_tools(self) -> None:
+        config = load_engine_config(CONFIGS_DIR)
+        parser = config.subagents["trello_intake_parser"]
+
+        assert parser.mcp_dependencies == ["trello"]
+        assert parser.mcp_include_tools["trello"] == []
+        assert parser.mcp_skip_hitl_tools["trello"] == []
+        assert parser.tool_result_projection == {}
+
+    def test_mcp_included_tools_have_projection_entries(self) -> None:
+        config = load_engine_config(CONFIGS_DIR)
+        missing: dict[str, list[str]] = {}
+
+        for subagent_id, subagent in config.subagents.items():
+            if not subagent.mcp_include_tools:
+                continue
+
+            expected_projection_keys: set[str] = set()
+            for server_id, remote_names in subagent.mcp_include_tools.items():
+                server_config = config.mcps[server_id]
+                expected_projection_keys.update(
+                    server_config.exposed_tool_name(remote_name) for remote_name in remote_names
+                )
+
+            missing_keys = sorted(expected_projection_keys - set(subagent.tool_result_projection))
+            if missing_keys:
+                missing[subagent_id] = missing_keys
+
+        assert missing == {}, f"Missing projection coverage: {missing}"
 
     def test_trello_task_matcher_has_board_and_card_projections(self) -> None:
         config = load_engine_config(CONFIGS_DIR)

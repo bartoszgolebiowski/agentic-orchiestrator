@@ -206,3 +206,27 @@ def project_tool_result(raw: str, projection: ProjectionSpec) -> str:
         return raw
 
     return json.dumps(projected, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def project_tool_result_strict(raw: str, projection: ProjectionSpec) -> str:
+    """Project *raw* tool output and fail closed when projection cannot be applied.
+
+    This variant is for LLM-facing tool responses. It never falls back to the
+    original raw payload, because that would leak verbose tool output back into
+    the ReAct loop.
+    """
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("Configured tool projection requires JSON output") from exc
+
+    try:
+        projected = _project_spec(data, projection)
+    except (JsonPathParserError, Exception) as exc:
+        logger.warning("Strict projection failed", exc_info=True)
+        raise ValueError("Configured tool projection could not be applied") from exc
+
+    if projected is None:
+        raise ValueError("Configured tool projection produced no result")
+
+    return json.dumps(projected, ensure_ascii=False, indent=2, sort_keys=True)

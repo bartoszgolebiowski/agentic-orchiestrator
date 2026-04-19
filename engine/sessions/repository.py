@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 
 from engine.sessions.models import (
     ConversationTurn,
+    HitlApprovalScope,
     HitlResponse,
     PendingToolCall,
     SessionData,
@@ -62,12 +63,22 @@ class SQLiteSessionRepository(SessionRepository):
                     conversation_history TEXT NOT NULL DEFAULT '[]',
                     events TEXT NOT NULL DEFAULT '[]',
                     pending_tool_call TEXT,
+                    hitl_approval_scope TEXT NOT NULL DEFAULT 'once',
                     result TEXT,
                     error TEXT,
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL
                 )
             """)
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+            }
+            if "hitl_approval_scope" not in columns:
+                conn.execute(
+                    "ALTER TABLE sessions "
+                    "ADD COLUMN hitl_approval_scope TEXT NOT NULL DEFAULT 'once'"
+                )
             conn.commit()
         finally:
             conn.close()
@@ -87,6 +98,9 @@ class SQLiteSessionRepository(SessionRepository):
                 if row["pending_tool_call"]
                 else None
             ),
+            hitl_approval_scope=HitlApprovalScope(
+                row["hitl_approval_scope"] if "hitl_approval_scope" in row.keys() else "once"
+            ),
             result=row["result"],
             error=row["error"],
             created_at=row["created_at"],
@@ -99,8 +113,8 @@ class SQLiteSessionRepository(SessionRepository):
             conn.execute(
                 """INSERT INTO sessions
                    (id, status, query, config_dir, conversation_history, events,
-                    pending_tool_call, result, error, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                          pending_tool_call, hitl_approval_scope, result, error, created_at, updated_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     session.id,
                     session.status.value,
@@ -113,6 +127,7 @@ class SQLiteSessionRepository(SessionRepository):
                         if session.pending_tool_call
                         else None
                     ),
+                    session.hitl_approval_scope.value,
                     session.result,
                     session.error,
                     session.created_at,
@@ -142,7 +157,7 @@ class SQLiteSessionRepository(SessionRepository):
                 """UPDATE sessions SET
                        status = ?, query = ?, config_dir = ?,
                        conversation_history = ?, events = ?,
-                       pending_tool_call = ?, result = ?, error = ?,
+                       pending_tool_call = ?, hitl_approval_scope = ?, result = ?, error = ?,
                        updated_at = ?
                    WHERE id = ?""",
                 (
@@ -156,6 +171,7 @@ class SQLiteSessionRepository(SessionRepository):
                         if session.pending_tool_call
                         else None
                     ),
+                    session.hitl_approval_scope.value,
                     session.result,
                     session.error,
                     session.updated_at,

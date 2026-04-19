@@ -21,6 +21,7 @@ from engine.core.events import EventType, StreamEvent, emit_event, set_event_que
 from engine.core.hitl import HitlManager
 from engine.core.storage import (
     ConversationTurn,
+    HitlApprovalScope,
     HitlResponse,
     PendingToolCall,
     SessionData,
@@ -99,6 +100,7 @@ class ChatRequest(BaseModel):
 
 class HitlResponseRequest(BaseModel):
     approved: bool
+    approval_scope: HitlApprovalScope = HitlApprovalScope.ONCE
     modified_arguments: dict | None = None
     rejection_reason: str | None = None
 
@@ -157,6 +159,8 @@ async def _run_engine_with_session(
 
         session.result = result
         session.status = SessionStatus.COMPLETED
+        if hitl_manager.is_session_auto_approved(session.id):
+            session.hitl_approval_scope = HitlApprovalScope.SESSION
         session.conversation_history.append(
             ConversationTurn(role="assistant", content=result)
         )
@@ -167,6 +171,8 @@ async def _run_engine_with_session(
         emit_event(EventType.RUN_ERROR, error=f"{type(exc).__name__}: {exc}")
         session.status = SessionStatus.FAILED
         session.error = f"{type(exc).__name__}: {exc}"
+        if hitl_manager.is_session_auto_approved(session.id):
+            session.hitl_approval_scope = HitlApprovalScope.SESSION
         session.pending_tool_call = None
         await repository.update(session)
     finally:
@@ -195,7 +201,7 @@ async def create_session(request: ChatRequest, app_request: Request) -> Streamin
     )
     await repository.create(session)
 
-    hitl_manager.register_session(session.id)
+    hitl_manager.register_session(session.id, session.hitl_approval_scope)
 
     queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
 
@@ -254,9 +260,12 @@ async def submit_hitl_response(session_id: str, request: HitlResponseRequest) ->
 
     response = HitlResponse(
         approved=request.approved,
+        approval_scope=request.approval_scope,
         modified_arguments=request.modified_arguments,
         rejection_reason=request.rejection_reason,
     )
+    if response.approved and response.approval_scope == HitlApprovalScope.SESSION:
+        session.hitl_approval_scope = HitlApprovalScope.SESSION
 
     session.status = SessionStatus.RUNNING
     session.pending_tool_call = None
