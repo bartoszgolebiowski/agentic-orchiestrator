@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from engine.core.storage import (
+from engine.sessions import (
     ConversationTurn,
     HitlApprovalScope,
     HitlResponse,

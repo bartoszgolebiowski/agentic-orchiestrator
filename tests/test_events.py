@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from engine.core.events import (
+from engine.events import (
     EventType,
     StreamEvent,
     emit,

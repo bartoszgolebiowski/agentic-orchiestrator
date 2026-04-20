@@ -1,4 +1,6 @@
 from engine.enrichment.models import EnrichmentResult
+from engine.enrichment.entities import EnricherEntity
+from engine.enrichment.factories import EnricherFactory
 from engine.enrichment.executor import apply_enrichment
 from engine.enrichment.document import (
     DocumentWorkflowConfig,
@@ -10,6 +12,8 @@ from engine.enrichment.document import (
 
 __all__ = [
     "EnrichmentResult",
+    "EnricherEntity",
+    "EnricherFactory",
     "apply_enrichment",
     "DocumentWorkflowConfig",
     "discover_markdown_sources",

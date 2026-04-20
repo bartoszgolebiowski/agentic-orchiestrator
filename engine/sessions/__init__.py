@@ -6,6 +6,8 @@ from engine.sessions.models import (
     SessionData,
     SessionStatus,
 )
+from engine.sessions.entities import SessionEntity
+from engine.sessions.factories import SessionFactory
 from engine.sessions.repository import SessionRepository, SQLiteSessionRepository
 from engine.sessions.hitl import HitlCallback, HitlManager
 
@@ -16,6 +18,8 @@ __all__ = [
     "HitlApprovalScope",
     "HitlResponse",
     "PendingToolCall",
+    "SessionEntity",
+    "SessionFactory",
     "SessionData",
     "SessionRepository",
     "SessionStatus",

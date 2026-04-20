@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-from engine.core.hitl import HitlManager
-from engine.core.storage import HitlApprovalScope, HitlResponse, PendingToolCall
+from engine.sessions.hitl import HitlManager
+from engine.sessions import HitlApprovalScope, HitlResponse, PendingToolCall
 
 
 @pytest.fixture()

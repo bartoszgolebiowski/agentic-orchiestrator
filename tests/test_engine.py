@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from engine.core.loader import load_engine_config
+from engine.config.loader import load_engine_config
 import engine.llm.client as llm
 import engine.llm.tracing as tracing
-from engine.core.models import (
+from engine.config.models import (
     AgentReActStep,
     AgentReActStepOutput,
     DelegationAction,
@@ -18,7 +18,7 @@ from engine.core.models import (
     RoleType,
     RoutingDecision,
 )
-from engine.core.security import (
+from engine.security import (
     BoundaryViolationError,
     enforce_agent_boundary,
     enforce_no_direct_tool_access,
@@ -328,7 +328,7 @@ class TestLLMClientConfiguration:
 
         monkeypatch.setenv("OPENAI_API_KEY", "test-key")
         monkeypatch.setenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1/")
-        monkeypatch.setattr(llm, "AsyncOpenAI", DummyClient)
+        monkeypatch.setattr("engine.llm.completion.AsyncOpenAI", DummyClient)
 
         client = llm.get_raw_client()
 
@@ -398,7 +398,7 @@ class TestTracingIntegration:
         mock_client = AsyncMock()
         mock_client.chat.completions.create = AsyncMock(return_value=response)
 
-        monkeypatch.setattr(llm, "observe", fake_observe)
+        monkeypatch.setattr("engine.llm.completion.observe", fake_observe)
 
         message = await llm.chat_completion(
             client=mock_client,
@@ -489,7 +489,7 @@ class TestTracingIntegration:
             captured["observe"] = kwargs
             return DummyObservation()
 
-        monkeypatch.setattr(llm, "observe", fake_observe)
+        monkeypatch.setattr("engine.llm.completion.observe", fake_observe)
 
         result = await llm.structured_completion(
             client=DummyClient(),
@@ -567,8 +567,8 @@ class TestTracingIntegration:
             captured["observe"] = kwargs
             return DummyObservation()
 
-        monkeypatch.setattr(llm, "observe", fake_observe)
-        monkeypatch.setattr(llm, "BadRequestError", DummyBadRequestError)
+        monkeypatch.setattr("engine.llm.completion.observe", fake_observe)
+        monkeypatch.setattr("engine.llm.completion.BadRequestError", DummyBadRequestError)
 
         result = await llm.structured_completion(
             client=DummyClient(),
@@ -664,7 +664,7 @@ class TestResponseModels:
 class TestReActLoop:
     @pytest.mark.asyncio
     async def test_react_with_tool_call_then_final_answer(self):
-        from engine.core.react import ReActLoop
+        from engine.agents.react import ReActLoop
 
         mock_client = AsyncMock()
 
@@ -712,7 +712,7 @@ class TestReActLoop:
 
     @pytest.mark.asyncio
     async def test_react_max_steps_exceeded(self):
-        from engine.core.react import ReActLoop, MaxStepsExceededError
+        from engine.agents.react import ReActLoop, MaxStepsExceededError
 
         mock_client = AsyncMock()
 
@@ -787,7 +787,7 @@ class TestInstructorReActLoop:
 
     @pytest.mark.asyncio
     async def test_instructor_react_delegation_then_final(self):
-        from engine.core.react import StructuredReActLoop
+        from engine.agents.react import StructuredReActLoop
 
         # Step 1: LLM returns a delegation action
         step1 = AgentReActStep(
@@ -824,7 +824,7 @@ class TestInstructorReActLoop:
 
     @pytest.mark.asyncio
     async def test_instructor_react_immediate_final_answer(self):
-        from engine.core.react import StructuredReActLoop
+        from engine.agents.react import StructuredReActLoop
 
         step = AgentReActStep(
             thought="This is trivial",
@@ -847,7 +847,7 @@ class TestInstructorReActLoop:
 
     @pytest.mark.asyncio
     async def test_instructor_react_strict_mode_requires_action_or_final(self):
-        from engine.core.react import StructuredReActLoop
+        from engine.agents.react import StructuredReActLoop
 
         mock_instructor_client = self._make_parse_client([
             self._make_parse_response(
@@ -880,7 +880,7 @@ class TestInstructorReActLoop:
 
     @pytest.mark.asyncio
     async def test_instructor_react_retries_on_multiple_tool_calls(self):
-        from engine.core.react import StructuredReActLoop
+        from engine.agents.react import StructuredReActLoop
 
         step1 = AgentReActStep(
             thought="delegate once",
@@ -912,7 +912,7 @@ class TestInstructorReActLoop:
         assert mock_instructor_client.responses.parse.await_count == 3
 
     def test_instructor_react_prompt_is_single_action_only(self):
-        from engine.core.react import StructuredReActLoop
+        from engine.agents.react import StructuredReActLoop
 
         loop = StructuredReActLoop(
             client=AsyncMock(),
@@ -954,7 +954,7 @@ class TestInstructorReActLoop:
 
     @pytest.mark.asyncio
     async def test_instructor_react_strict_mode_rejects_thought_only(self):
-        from engine.core.react import StructuredReActLoop
+        from engine.agents.react import StructuredReActLoop
 
         mock_instructor_client = self._make_parse_client([
             self._make_parse_response(SimpleNamespace(thought="maybe", action=None, final_answer=None))
@@ -974,7 +974,7 @@ class TestInstructorReActLoop:
 
     @pytest.mark.asyncio
     async def test_instructor_react_max_steps_exceeded(self):
-        from engine.core.react import StructuredReActLoop, MaxStepsExceededError
+        from engine.agents.react import StructuredReActLoop, MaxStepsExceededError
 
         # Always returns delegation, never final
         step = AgentReActStep(

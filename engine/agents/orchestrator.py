@@ -9,11 +9,12 @@ from pydantic import Field, create_model
 
 from engine.events import EventType, emit_event
 from engine.llm.client import structured_completion
-from engine.config.models import EngineConfig, RoutingDecision, RoutingDecisionOutput
+from engine.config.models import EngineConfig
+from engine.agents.models import RoutingDecision, RoutingDecisionOutput
 from engine.sessions.hitl import HitlCallback
 from engine.llm.tracing import observe
 from engine.mcp.runtime import McpManager
-from engine.agents.agent import AgentPlanner
+from engine.agents.agent_planner import AgentPlanner
 
 logger = logging.getLogger(__name__)
 

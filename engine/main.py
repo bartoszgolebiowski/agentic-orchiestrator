@@ -12,17 +12,17 @@ from dotenv import load_dotenv
 
 import engine.tools  # noqa: F401 — trigger tool registration
 
-from engine.core.llm import get_raw_client
-from engine.core.loader import load_engine_config
-from engine.core.graph import validate_config_graph, build_dependency_tree
-from engine.core.runtime_state import clear_engine_config, set_engine_config
-from engine.core.tracing import observe, flush, log_langfuse_connection_status
-from engine.core.enrichment import apply_enrichment
-from engine.core.events import EventType, emit_event
-from engine.core.models import EngineConfig
-from engine.core.hitl import HitlCallback
+from engine.llm.client import get_raw_client
+from engine.config.loader import load_engine_config
+from engine.config.graph import validate_config_graph, build_dependency_tree
+from engine.config.context import clear_engine_config, set_engine_config
+from engine.llm.tracing import observe, flush, log_langfuse_connection_status
+from engine.enrichment.executor import apply_enrichment
+from engine.events import EventType, emit_event
+from engine.config.models import EngineConfig
+from engine.sessions.hitl import HitlCallback
 from engine.mcp.runtime import McpManager
-from engine.roles.orchestrator import Orchestrator
+from engine.agents.orchestrator import Orchestrator
 
 
 logging.basicConfig(

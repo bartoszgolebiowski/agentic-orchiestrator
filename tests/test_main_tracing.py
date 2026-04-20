@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from engine.core.models import EngineConfig, EnricherConfig, OrchestratorConfig
+from engine.config.models import EngineConfig, EnricherConfig, OrchestratorConfig
 import engine.main as main_module
 
 

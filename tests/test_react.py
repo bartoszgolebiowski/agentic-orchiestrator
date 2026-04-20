@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from engine.core.events import EventType
-from engine.core.react import ReActLoop
+from engine.events import EventType
+from engine.agents.react import ReActLoop
 
 
 @dataclass
@@ -45,7 +45,7 @@ async def test_react_loop_retries_empty_final_answer(monkeypatch):
         max_steps=3,
     )
 
-    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
+    monkeypatch.setattr("engine.agents.react.native.chat_completion", fake_chat_completion)
 
     result = await loop.run("extract markdown")
 
@@ -105,9 +105,9 @@ async def test_react_loop_emits_step_usage_for_tool_and_final_steps(monkeypatch)
     def fake_emit_event(event_type: EventType, **data: object) -> None:
         captured_events.append((event_type, data))
 
-    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
-    monkeypatch.setattr("engine.agents.react.emit_event", fake_emit_event)
-    monkeypatch.setattr("engine.agents.react.get_last_usage_details", lambda: next(usage_snapshots))
+    monkeypatch.setattr("engine.agents.react.native.chat_completion", fake_chat_completion)
+    monkeypatch.setattr("engine.agents.react.native.emit_event", fake_emit_event)
+    monkeypatch.setattr("engine.agents.react.native.get_last_usage_details", lambda: next(usage_snapshots))
 
     loop = ReActLoop(
         client=object(),

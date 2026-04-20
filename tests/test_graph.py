@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from engine.core.loader import load_engine_config
-from engine.core.graph import (
+from engine.config.loader import load_engine_config
+from engine.config.graph import (
     ConfigIssue,
     build_dependency_dict,
     build_dependency_tree,

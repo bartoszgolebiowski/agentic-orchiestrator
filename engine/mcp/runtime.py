@@ -1,39 +1,27 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import anyio
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AsyncExitStack
-from dataclasses import dataclass
-from datetime import timedelta
-from collections.abc import Awaitable, Callable
-from typing import Any, Sequence, TypeVar
+from typing import Any, TypeVar
 
-import httpx
+import anyio
 from mcp import ClientSession
-from mcp.client.stdio import StdioServerParameters, stdio_client
-from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
-from mcp.types import CallToolResult, PaginatedRequestParams
 
-from engine.core.tracing import observe
-from engine.mcp.models import (
-    McpHttpConnectionConfig,
-    McpServerConfig,
-    McpStdioConnectionConfig,
+from engine.llm.tracing import observe
+from engine.mcp.caller import (
+    McpToolCaller,
+    format_error_hint as _format_error_hint,
+    serialize_call_tool_result,
+    serialize_error_response as _serialize_error_response,
 )
+from engine.mcp.connection import HttpConnector, StdioConnector
+from engine.mcp.discovery import McpToolDiscovery, ResolvedMcpTool
+from engine.mcp.models import McpHttpConnectionConfig, McpServerConfig, McpStdioConnectionConfig
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
-
-
-@dataclass(frozen=True)
-class ResolvedMcpTool:
-    server_id: str
-    remote_name: str
-    exposed_name: str
-    description: str
-    input_schema: dict[str, Any]
 
 
 def build_openai_mcp_tool_spec(tool: ResolvedMcpTool) -> dict[str, Any]:
@@ -47,49 +35,6 @@ def build_openai_mcp_tool_spec(tool: ResolvedMcpTool) -> dict[str, Any]:
     }
 
 
-def _format_content_block(content_block: Any) -> str:
-    if getattr(content_block, "type", None) == "text":
-        return getattr(content_block, "text", "")
-
-    if hasattr(content_block, "model_dump"):
-        try:
-            payload = content_block.model_dump(mode="json")
-        except TypeError:
-            payload = content_block.model_dump()
-        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
-
-    return str(content_block)
-
-
-def _serialize_error_response(message: str) -> str:
-    return json.dumps({"status": "error", "hint": message}, ensure_ascii=False, indent=2)
-
-
-def _format_error_hint(exc: Exception) -> str:
-    if isinstance(exc, KeyError) and exc.args:
-        message = str(exc.args[0]).strip()
-    else:
-        message = str(exc).strip()
-    return message or type(exc).__name__
-
-
-def serialize_call_tool_result(result: CallToolResult) -> str:
-    parts: list[str] = []
-
-    if result.structuredContent is not None:
-        parts.append(json.dumps(result.structuredContent, ensure_ascii=False, indent=2, sort_keys=True))
-
-    for content_block in result.content:
-        content_text = _format_content_block(content_block).strip()
-        if content_text:
-            parts.append(content_text)
-
-    result_text = "\n".join(parts).strip()
-    if result.isError:
-        return _serialize_error_response(result_text or "MCP tool call failed")
-    return result_text
-
-
 class McpServerRuntime:
     def __init__(self, config: McpServerConfig) -> None:
         self.config = config
@@ -98,6 +43,9 @@ class McpServerRuntime:
         self._session_lock = asyncio.Lock()
         self._request_lock = asyncio.Lock()
         self._tools: list[ResolvedMcpTool] | None = None
+
+        self._discovery = McpToolDiscovery(config)
+        self._caller = McpToolCaller()
 
     def _session_is_open(self) -> bool:
         session = self._session
@@ -143,59 +91,17 @@ class McpServerRuntime:
             session = await self._ensure_session()
             return await operation(session)
 
-    async def _connect_stdio(self, connection: McpStdioConnectionConfig, stack: AsyncExitStack) -> ClientSession:
-        server_parameters = StdioServerParameters(
-            command=connection.command,
-            args=connection.args,
-            env=connection.env or None,
-            cwd=connection.cwd,
-            encoding=connection.encoding,
-            encoding_error_handler=connection.encoding_error_handler,
-        )
-        read_stream, write_stream = await stack.enter_async_context(stdio_client(server_parameters))
-        read_timeout = timedelta(seconds=connection.request_timeout_seconds)
-        return await stack.enter_async_context(
-            ClientSession(
-                read_stream,
-                write_stream,
-                read_timeout_seconds=read_timeout,
-            )
-        )
+    async def _connect_stdio(self, connection: McpStdioConnectionConfig) -> tuple[AsyncExitStack, ClientSession]:
+        return await StdioConnector(self.config).connect()
 
-    async def _connect_http(self, connection: McpHttpConnectionConfig, stack: AsyncExitStack) -> ClientSession:
-        http_timeout = httpx.Timeout(connection.request_timeout_seconds)
-        http_client = create_mcp_http_client(headers=connection.headers or None, timeout=http_timeout)
-        await stack.enter_async_context(http_client)
-        read_stream, write_stream, _ = await stack.enter_async_context(
-            streamable_http_client(
-                connection.url,
-                http_client=http_client,
-                terminate_on_close=connection.terminate_on_close,
-            )
-        )
-        read_timeout = timedelta(seconds=connection.request_timeout_seconds)
-        return await stack.enter_async_context(
-            ClientSession(
-                read_stream,
-                write_stream,
-                read_timeout_seconds=read_timeout,
-            )
-        )
+    async def _connect_http(self, connection: McpHttpConnectionConfig) -> tuple[AsyncExitStack, ClientSession]:
+        return await HttpConnector(self.config).connect()
 
     async def _connect(self) -> tuple[AsyncExitStack, ClientSession]:
-        stack = AsyncExitStack()
-        try:
-            connection = self.config.connection
-            if isinstance(connection, McpStdioConnectionConfig):
-                session = await self._connect_stdio(connection, stack)
-            else:
-                session = await self._connect_http(connection, stack)
-
-            await asyncio.wait_for(session.initialize(), timeout=connection.startup_timeout_seconds)
-            return stack, session
-        except Exception:
-            await stack.aclose()
-            raise
+        connection = self.config.connection
+        if isinstance(connection, McpStdioConnectionConfig):
+            return await self._connect_stdio(connection)
+        return await self._connect_http(connection)
 
     async def _ensure_session(self) -> ClientSession:
         if self._session is not None and self._session_stack is not None and self._session_is_open():
@@ -228,56 +134,7 @@ class McpServerRuntime:
                 metadata={"component": "mcp", "server_id": self.config.id},
             ) as span:
                 async def discover(active_session: ClientSession) -> list[ResolvedMcpTool]:
-                    discovered: list[ResolvedMcpTool] = []
-                    discovered_remote_names: set[str] = set()
-                    discovered_exposed_names: set[str] = set()
-                    requested_tools = set(self.config.include_tools)
-                    excluded_tools = set(self.config.exclude_tools)
-                    cursor: str | None = None
-
-                    while True:
-                        params = PaginatedRequestParams(cursor=cursor) if cursor else None
-                        result = await active_session.list_tools(params=params)
-
-                        for tool in result.tools:
-                            if requested_tools and tool.name not in requested_tools:
-                                continue
-                            if tool.name in excluded_tools:
-                                continue
-
-                            exposed_name = self.config.exposed_tool_name(tool.name)
-                            if exposed_name in discovered_exposed_names:
-                                raise ValueError(
-                                    f"MCP server '{self.config.id}' produced a duplicate exposed tool name '{exposed_name}'"
-                                )
-
-                            discovered.append(
-                                ResolvedMcpTool(
-                                    server_id=self.config.id,
-                                    remote_name=tool.name,
-                                    exposed_name=exposed_name,
-                                    description=tool.description or f"MCP tool '{tool.name}' from server '{self.config.id}'",
-                                    input_schema=tool.inputSchema,
-                                )
-                            )
-                            discovered_remote_names.add(tool.name)
-                            discovered_exposed_names.add(exposed_name)
-
-                        cursor = result.nextCursor
-                        if not cursor:
-                            break
-
-                    if requested_tools:
-                        missing = sorted(requested_tools - discovered_remote_names)
-                        if missing:
-                            raise ValueError(
-                                f"MCP server '{self.config.id}' did not expose requested tools: {missing}"
-                            )
-
-                    if not discovered:
-                        raise ValueError(f"MCP server '{self.config.id}' did not expose any usable tools")
-
-                    return discovered
+                    return await self._discovery.discover(active_session)
 
                 discovered = await self._run_with_reconnect(discover)
 
@@ -301,8 +158,7 @@ class McpServerRuntime:
                 metadata={"component": "mcp", "server_id": self.config.id, "tool": exposed_name},
             ) as span:
                 async def invoke(active_session: ClientSession) -> str:
-                    result = await active_session.call_tool(tool.remote_name, arguments=arguments)
-                    return serialize_call_tool_result(result)
+                    return await self._caller.call(active_session, tool.remote_name, arguments)
 
                 result_text = await self._run_with_reconnect(invoke)
                 if span is not None:
@@ -326,8 +182,6 @@ class McpManager:
     async def describe_tools(self, server_ids: Sequence[str]) -> list[ResolvedMcpTool]:
         seen_servers = list(dict.fromkeys(server_ids))
 
-        # Keep MCP discovery serialized so reconnects and tool registration stay
-        # deterministic per server.
         discovery_results: list[list[ResolvedMcpTool]] = []
         for server_id in seen_servers:
             discovery_results.append(await self._get_runtime(server_id).list_tools())
@@ -367,7 +221,6 @@ class McpManager:
         await self.describe_tools(self._runtimes.keys())
 
     async def health(self) -> dict[str, dict[str, Any]]:
-        """Return per-server health status with tool counts or error details."""
         status: dict[str, dict[str, Any]] = {}
         for server_id, runtime in self._runtimes.items():
             try:
@@ -380,3 +233,12 @@ class McpManager:
     async def aclose(self) -> None:
         for runtime in self._runtimes.values():
             await runtime.aclose()
+
+
+__all__ = [
+    "McpManager",
+    "McpServerRuntime",
+    "ResolvedMcpTool",
+    "build_openai_mcp_tool_spec",
+    "serialize_call_tool_result",
+]

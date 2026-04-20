@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from engine.core.loader import load_engine_config
-from engine.core.models import EnricherConfig, EnrichmentDecision
+from engine.config.loader import load_engine_config
+from engine.config.models import EnricherConfig, EnrichmentDecision
 
 
 CONFIGS_DIR = Path(__file__).parent.parent / "configs"
@@ -102,7 +102,7 @@ class TestEnrichmentDecision:
 
 class TestEnricherGraphValidation:
     def test_real_config_has_no_enricher_errors(self):
-        from engine.core.graph import validate_config_graph
+        from engine.config.graph import validate_config_graph
 
         config = load_engine_config(CONFIGS_DIR)
         issues = validate_config_graph(config)
@@ -110,7 +110,7 @@ class TestEnricherGraphValidation:
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_enricher_collision_with_agent(self, tmp_path):
-        from engine.core.graph import validate_config_graph
+        from engine.config.graph import validate_config_graph
 
         (tmp_path / "agents").mkdir()
         (tmp_path / "subagents").mkdir()

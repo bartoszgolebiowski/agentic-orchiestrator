@@ -5,8 +5,8 @@ import json
 import pytest
 
 from engine.contracts.document import DocumentPlan
-from engine.core.contracts import resolve_model, validate_model_payload
-from engine.core.models import ModelSpec
+from engine.config.contracts import resolve_model, validate_model_payload
+from engine.config.models import ModelSpec
 from engine.tools.markdown_tools import read_markdown_structure
 
 

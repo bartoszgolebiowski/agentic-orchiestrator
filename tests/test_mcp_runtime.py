@@ -10,9 +10,9 @@ import pytest
 
 from engine.mcp.runtime import McpManager, McpServerRuntime, ResolvedMcpTool, build_openai_mcp_tool_spec, serialize_call_tool_result
 from engine.mcp.models import McpHttpConnectionConfig, McpServerConfig
-from engine.core.events import EventType
-from engine.core.models import NodeConfig, RoleType
-from engine.roles.subagent import SubagentExecutor
+from engine.events import EventType
+from engine.config.models import NodeConfig, RoleType
+from engine.agents.subagent import SubagentExecutor
 
 
 class _ConcurrentGuardRuntime:
@@ -307,7 +307,7 @@ def _make_mcp_manager(server_id: str, tools: list[tuple[str, str]]) -> McpManage
 
 
 def _make_engine_config(**overrides):
-    from engine.core.models import EngineConfig, OrchestratorConfig
+    from engine.config.models import EngineConfig, OrchestratorConfig
     defaults = {
         "orchestrator": OrchestratorConfig(),
         "agents": {},
@@ -603,8 +603,11 @@ async def test_subagent_execute_projects_mcp_output_before_next_react_turn(monke
     def fake_emit_event(event_type: EventType, **data: object) -> None:
         captured_events.append((event_type, data))
 
-    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
-    monkeypatch.setattr("engine.agents.subagent.emit_event", fake_emit_event)
+    monkeypatch.setattr("engine.agents.react.native.chat_completion", fake_chat_completion)
+    monkeypatch.setattr("engine.agents.execution.executor.emit_event", fake_emit_event)
+    monkeypatch.setattr("engine.agents.execution.local_tool_handler.emit_event", fake_emit_event)
+    monkeypatch.setattr("engine.agents.execution.mcp_tool_handler.emit_event", fake_emit_event)
+    monkeypatch.setattr("engine.agents.execution.hitl_handler.emit_event", fake_emit_event)
 
     result = await executor.execute("publish", input_json={"plan": "demo"})
 
@@ -748,7 +751,7 @@ async def test_subagent_execute_projects_every_mcp_observation_across_react_turn
         captured_threads.append(_snapshot_messages(messages))
         return responses.pop(0)
 
-    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
+    monkeypatch.setattr("engine.agents.react.native.chat_completion", fake_chat_completion)
 
     result = await executor.execute("publish", input_json={"plan": "demo"})
 
@@ -830,7 +833,7 @@ async def test_subagent_execute_fails_closed_when_projection_cannot_apply(monkey
         captured_threads.append(_snapshot_messages(messages))
         return responses.pop(0)
 
-    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
+    monkeypatch.setattr("engine.agents.react.native.chat_completion", fake_chat_completion)
 
     result = await executor.execute("publish", input_json={"plan": "demo"})
 
@@ -904,7 +907,7 @@ async def test_subagent_execute_preserves_mcp_error_json(monkeypatch) -> None:
         captured_threads.append(_snapshot_messages(messages))
         return responses.pop(0)
 
-    monkeypatch.setattr("engine.agents.react.chat_completion", fake_chat_completion)
+    monkeypatch.setattr("engine.agents.react.native.chat_completion", fake_chat_completion)
 
     result = await executor.execute("publish", input_json={"plan": "demo"})
 

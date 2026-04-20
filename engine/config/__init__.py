@@ -16,6 +16,8 @@ from engine.config.models import (
     ToolDefinition,
     ToolParameter,
 )
+from engine.config.entities import EngineConfigEntity
+from engine.config.factories import EngineConfigFactory
 
 __all__ = [
     "AgentReActStep",
@@ -34,4 +36,6 @@ __all__ = [
     "StructuredOutputContractConfig",
     "ToolDefinition",
     "ToolParameter",
+    "EngineConfigEntity",
+    "EngineConfigFactory",
 ]

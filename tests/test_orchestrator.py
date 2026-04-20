@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from engine.core.models import EngineConfig, NodeConfig, OrchestratorConfig, RoutingDecision, RoleType
-from engine.roles.orchestrator import Orchestrator
+from engine.config.models import EngineConfig, NodeConfig, OrchestratorConfig, RoutingDecision, RoleType
+from engine.agents.orchestrator import Orchestrator
 
 
 def _build_engine_config() -> EngineConfig:

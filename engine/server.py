@@ -17,9 +17,9 @@ from pydantic import BaseModel
 
 import engine.tools  # noqa: F401 — trigger tool registration
 
-from engine.core.events import EventType, StreamEvent, emit_event, set_event_queue
-from engine.core.hitl import HitlManager
-from engine.core.storage import (
+from engine.events import EventType, StreamEvent, emit_event, set_event_queue
+from engine.sessions.hitl import HitlManager
+from engine.sessions import (
     ConversationTurn,
     HitlApprovalScope,
     HitlResponse,
@@ -29,8 +29,8 @@ from engine.core.storage import (
     SessionStatus,
     SQLiteSessionRepository,
 )
-from engine.core.graph import validate_config_graph
-from engine.core.loader import load_engine_config
+from engine.config.graph import validate_config_graph
+from engine.config.loader import load_engine_config
 from engine.main import build_mcp_manager, main as engine_main
 
 logger = logging.getLogger(__name__)

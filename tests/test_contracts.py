@@ -3,8 +3,8 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 from engine.contracts.document import MarkdownExtractionInput
-from engine.core.contracts import describe_model_contract, normalize_handoff_payload
-from engine.core.react import StructuredReActLoop
+from engine.config.contracts import describe_model_contract, normalize_handoff_payload
+from engine.agents.react import StructuredReActLoop
 
 
 def test_describe_model_contract_is_compact() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine.core.pipeline import PipelineState, StageStatus, is_failure_observation
+from engine.pipeline import PipelineState, StageStatus, is_failure_observation
 
 
 class TestPipelineState:
